@@ -19,14 +19,14 @@ def check_fs_size():
     fs_size = os.path.getsize('disk')
     if fs_size > fs_size_bytes:
         print("** File System is bigger than it should be (%s) **" %
-              (pretty_size(fs_size)))
+              (subprocess.pretty_size(fs_size)))
 
 
 def do_exit():
     issue('exit')
     return p.communicate()[0]
-# create a file that is larger than 8 blocks so that the file system is forced to use
-# indirect block pointers
+# create a file that is larger than 8 blocks so that the file system is forced
+# to use indirect block pointers
 
 
 def test_large_file():
@@ -38,8 +38,8 @@ def test_large_file():
     check_fs_size()
     do_exit()
 
-# create a directory with enough files that the directory needs to be resized into
-# an inode with indirect pointers
+# create a directory with enough files that the directory needs to be resized
+# into an inode with indirect pointers
 
 
 def test_large_dir():
