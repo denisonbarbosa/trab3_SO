@@ -3,6 +3,10 @@
 
 #define FS_SIZE 2048
 
+/**
+ * @brief Initializes the superblock and the root directory
+ * 
+ */
 void fs_init( void);
 
 /**
@@ -68,18 +72,72 @@ int fs_read( int fd, char *buf, int count);
 int fs_write( int fd, char *buf, int count);
 
 /**
- * @brief 
+ * @brief Shifts the pointer to the offset
  * 
- * @param fd 
- * @param offset 
- * @return int 
+ * @param fd File descriptor
+ * @param offset Amount to the shifted
+ * @return int new position of the descripor | int -1 if failed
+ * 
+ * @note Can go pass the EOF. If passed, the intermediate should be filled with \0
  */
 int fs_lseek( int fd, int offset);
+
+/**
+ * @brief Creates a directory named {fileName}
+ * 
+ * @param fileName Name of the new directory
+ * @return int 0 if created | int -1 if the directory already exists
+ */
 int fs_mkdir( char *fileName);
+
+/**
+ * @brief Removes an empty directory
+ * 
+ * @param fileName name of the directory to be removed
+ * @return int 0 if successful | -1 if failed i.e. directory not empty
+ */
 int fs_rmdir( char *fileName);
+
+/**
+ * @brief Changes current directory to {dirName}
+ * 
+ * @param dirName Name of the new directory
+ * @return int 0 if successful | -1 if failed i.e. directory does not exist
+ */
 int fs_cd( char *dirName);
+
+/**
+ * @brief Creates a new link to an existant file
+ * 
+ * @param old_fileName Previous name of the file
+ * @param new_fileName New name
+ * @return int 0 if successful | -1 if failed i.e. trying to use the function on a dir
+ * 
+ * @note If new_fileName already exists, it is not replaced
+ * @note Both old and new can be used to access and modify the file
+ * @note Since there aren't paths beyond current_dir, both old and new must be in the same dir
+ */
 int fs_link( char *old_fileName, char *new_fileName);
+
+/**
+ * @brief Removes fileName from the File System
+ * 
+ * @param fileName file to be removed
+ * @return int 0 if successful | -1 if failed i.e. trying to use the function on a dir
+ * 
+ * @note if fileName was the last reference to a file and it is:
+ *      - closed: file is removed and the memory will be free for usage
+ *      - open: will remain until the last file descriptor is closed
+ */
 int fs_unlink( char *fileName);
+
+/**
+ * @brief Returns information about a file
+ * 
+ * @param fileName Name of the file to be checked
+ * @param buf Data structure to store the information
+ * @return int 
+ */
 int fs_stat( char *fileName, fileStat *buf);
 
 #define MAX_FILE_NAME 32
