@@ -4,7 +4,7 @@
 #define FS_SIZE 2048
 
 /**
- * @brief Initializes the superblock and the root directory
+ * @brief Initializes the filesystem
  * 
  */
 void fs_init( void);
@@ -138,7 +138,7 @@ int fs_unlink( char *fileName);
  * @param buf Data structure to store the information
  * @return int 
  */
-int fs_stat( char *fileName, fileStat *buf);
+// int fs_stat( char *fileName, fileStat *buf);
 
 #define MAX_FILE_NAME 32
 #define MAX_PATH_NAME 256  // This is the maximum supported "full" path len, eg: /foo/bar/test.txt, rather than the maximum individual filename len.
