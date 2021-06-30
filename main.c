@@ -6,9 +6,11 @@
 #define FORMATTED_DISK 1
 #define N_INODES 510
 #define N_DATA_BLOCKS 1536
-#define DIRECTORY_TYPE 0
-#define FILE_TYPE 1
 #define MAX_PATH_NAME 256
+
+#define INODE_EMPTY '0'
+#define INODE_DIR '1'
+#define INODE_FILE '2'
 
 static FILE *fd;
 
@@ -21,11 +23,12 @@ typedef struct link_s
 //TODO: inode_t: created correctly?
 typedef struct inode_s
 {
-    char status;
-    char *type;
-    int size;
-    int n_links;
-    link_t links[10];
+    char type; // 1
+    // char *name; // 8
+    // int id; // 4
+    int size; // 4
+    int n_links; // 4
+    int links[10]; // 40
 } inode_t;
 
 //TODO: super_block_t: created correctly?
@@ -125,22 +128,19 @@ int fs_mkfs(void)
 
     disk->bitmap[0] = '0';
 
-    disk->inodes[0].status = '0';
-    disk->inodes[0].type = DIRECTORY_TYPE;
+    disk->inodes[0].type = INODE_DIR;
     disk->inodes[0].size = 0;
     disk->inodes[0].n_links = 2;
-    disk->inodes[0].links[0].name = ".";
-    disk->inodes[0].links[0].block = 5;
-    disk->inodes[0].links[1].name = "..";
-    disk->inodes[0].links[1].block = 5;
+    disk->inodes[0].links[0] = 0;
+    disk->inodes[0].links[1] = 0;
 
+    
     for (int i = 1; i < N_DATA_BLOCKS; i++)
     {
         if (i < N_INODES)
         {
 
-            disk->inodes[i].status = '1';
-            disk->inodes[i].type = NULL;
+            disk->inodes[i].type = INODE_EMPTY;
             disk->inodes[i].size = 0;
             disk->inodes[i].n_links = 0;
         }
@@ -181,12 +181,11 @@ int main()
 {
     fs_init();
 
-    printf("first inode: status->%c size->%d n_links->%d first_link->%s\n",
-           disk->inodes[0].status, disk->inodes[0].size, disk->inodes[0].n_links, disk->inodes[0].links[0].name);
-
     printf("size of superblock: %lu\n", sizeof(disk->super_block));
-    printf("size of inode: %lu\n", sizeof(disk->inodes[0]));
+    printf("size of inode: %lu\n", sizeof(inode_t));
     printf("size of link_t: %lu\n", sizeof(link_t));
+    printf("size of char*: %lu\n", sizeof(char*));
+    printf("size of int: %lu\n", sizeof(int));
     printf("size of bitmap: %lu\n", sizeof(disk->bitmap));
 
     return 0;

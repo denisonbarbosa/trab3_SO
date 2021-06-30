@@ -12,17 +12,22 @@
 #endif
 
 #define FORMATTED_DISK 1
-#define N_INODES 510
-#define N_DATA_BLOCKS 1536
+#define N_INODES 1032
+#define N_DATA_BLOCKS 1914
+
+#define INODE_EMPTY '0'
+#define INODE_DIR '1'
+#define INODE_FILE '2'
 
 //TODO: inode_t: created correctly?
 typedef struct inode_s
 {
-    char status;
-    char *type;
-    int size;
+    char type; 
+    int size; 
     int n_links;
-    char *links;
+    int hard_links[10];
+    int secundary_link;
+    int tertiary_link;
 } inode_t;
 
 //TODO: super_block_t: created correctly?
@@ -31,17 +36,12 @@ typedef struct super_block_s
     int blocks_size;
     int n_inodes;
     int n_data_blocks;
+    int free_inodes;
+    int free_data_blocks;
     int first_inode;
     int first_data_block;
     int magic_number;
 } super_block_t;
-
-//TODO: data_block_t: created correctly?
-typedef struct data_block_s
-{
-    char *content;
-
-} data_block_t;
 
 typedef struct disk_s
 {
@@ -49,6 +49,23 @@ typedef struct disk_s
     inode_t *inodes;
     char *bitmap; // [i] = 1 if block i is free, 0 otherwise
 } disk_t;
+
+typedef struct dir_entry_s
+{
+    int self_inode;
+    int parent_inode;
+    int size;
+    int self_block;
+    int parent_block;
+    char *name;
+} dir_entry_t;
+
+typedef struct file_entry_s
+{
+    int size;
+    int block_number;
+    char name[MAX_FILE_NAME];
+} file_entry_t;
 
 static disk_t *disk;
 
@@ -69,7 +86,11 @@ void fs_init(void)
     }
     else
     {
-
+        for (int i = 0; i < 4; i ++)
+            block_read(i+1, (char*)(disk->bitmap + i * BLOCK_SIZE));
+        
+        for (int i = 0; i < (BLOCK_SIZE/N_INODES); i++)
+            block_read((i+5), (char*)disk->inodes+(8*i));
     }
 }
 
@@ -78,30 +99,50 @@ int fs_mkfs(void)
 {
     disk->super_block->blocks_size = BLOCK_SIZE;
     disk->super_block->n_inodes = N_INODES;
+    disk->super_block->free_inodes = N_INODES;
     disk->super_block->n_data_blocks = N_DATA_BLOCKS;
+    disk->super_block->free_data_blocks = N_DATA_BLOCKS;
     disk->super_block->magic_number = FORMATTED_DISK;
-    disk->super_block->first_inode = (N_DATA_BLOCKS/BLOCK_SIZE) + 2;
-    disk->super_block->first_data_block = disk->super_block->first_inode + N_INODES;
+    disk->super_block->first_inode = 5;
+    disk->super_block->first_data_block = disk->super_block->first_inode + (N_INODES/8);
+      
+    disk->inodes[0].type = INODE_DIR;
+    disk->inodes[0].size = 0;
+    disk->inodes[0].n_links = 2;
+    disk->inodes[0].hard_links[0] = disk->super_block->first_data_block;
+    disk->bitmap[0] = '0';
+
+    dir_entry_t* root = (dir_entry_t*)malloc(sizeof(dir_entry_t));
+
+    root->name = "root";
+    root->self_inode = 5;
+    root->parent_inode = 5;
+    root->self_block = disk->super_block->first_data_block;
+    root->parent_block = disk->super_block->first_data_block;
+    root->size = 0;
+
     
-    for (int i = 0; i < N_DATA_BLOCKS; i++)
+    for (int i = 1; i < N_DATA_BLOCKS; i++)
     {
         if (i < N_INODES)
         {
-            disk->inodes[i].status = '1';
-            disk->inodes[i].type = NULL;
+            disk->inodes[i].type = INODE_EMPTY;
             disk->inodes[i].size = 0;
             disk->inodes[i].n_links = 0;
-            disk->inodes[i].links = NULL;
         }
         disk->bitmap[i] = '1';
     }
     
-    char *buffer;
-    block_read(0, buffer);
-    if (buffer == NULL)
-        return -1;
-
     block_write(0, (char*)disk->super_block);
+
+    for (int i = 0; i < 4; i++)
+        block_write(i+1, (char*)(disk->bitmap + (i * BLOCK_SIZE)));
+
+    for (int i = 0; i < (N_INODES/8); i++)
+        block_write(i+5, (char*)(disk->inodes + i * 8));
+
+    block_write(disk->super_block->first_data_block, (char*)root);
+    
     return 0;
 }
 
