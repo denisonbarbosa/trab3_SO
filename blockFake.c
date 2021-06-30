@@ -3,9 +3,9 @@
 #include "common.h"
 #include "block.h"
 
-static FILE *fd;
-
 #include <errno.h>
+
+static FILE *fd;
 
 void block_init( void) {
 	int ret;
