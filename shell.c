@@ -289,7 +289,7 @@ static void shell_stat( void) {
 	int ret;
 	char s[10];
 	
-	// ret = fs_stat( argv[1], &status);
+	ret = fs_stat( argv[1], &status);
 	if ( ret == 0) {
 		itoa( status.inodeNo, s);
 		writeStr( "    Inode No         : "); writeStr( s); writeChar( RETURN);

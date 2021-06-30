@@ -1,5 +1,5 @@
 #include "util.h"
-// #include "common.h"
+#include "common.h"
 #include "block.h"
 #include "fs.h"
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #define ERROR_MSG(m)
 #endif
 
-#define FORMATTED_DISK "0xf"
+#define FORMATTED_DISK 1
 #define N_INODES 510
 #define N_DATA_BLOCKS 1536
 
@@ -33,7 +33,7 @@ typedef struct super_block_s
     int n_data_blocks;
     int first_inode;
     int first_data_block;
-    char *magic_number;
+    int magic_number;
 } super_block_t;
 
 //TODO: data_block_t: created correctly?
@@ -63,7 +63,7 @@ void fs_init(void)
     disk->bitmap = (char*)malloc(N_DATA_BLOCKS * sizeof(char));
 
     block_read(0, (char*)disk->super_block);
-    if (disk->super_block->magic_number == NULL)
+    if (disk->super_block->magic_number == 0)
     {
         fs_mkfs();
     }
@@ -167,7 +167,7 @@ int fs_unlink(char *fileName)
 
 //TODO: fs_stat: implementation
 
-// int fs_stat(char *fileName, fileStat *buf)
-// {
-//     return -1;
-// }
+int fs_stat(char *fileName, fileStat *buf)
+{
+    return -1;
+}
