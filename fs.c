@@ -15,9 +15,9 @@
 #define N_INODES 1032
 #define N_DATA_BLOCKS 1914
 
-#define INODE_EMPTY '0'
-#define INODE_DIR '1'
-#define INODE_FILE '2'
+#define TYPE_EMPTY '0'
+#define TYPE_DIR '1'
+#define TYPE_FILE '2'
 
 //TODO: inode_t: created correctly?
 typedef struct inode_s
@@ -64,6 +64,7 @@ typedef struct file_entry_s
 {
     int size;
     int block_number;
+    int directory_inode;
     char name[MAX_FILE_NAME];
 } file_entry_t;
 
@@ -106,7 +107,7 @@ int fs_mkfs(void)
     disk->super_block->first_inode = 5;
     disk->super_block->first_data_block = disk->super_block->first_inode + (N_INODES/8);
       
-    disk->inodes[0].type = INODE_DIR;
+    disk->inodes[0].type = TYPE_DIR;
     disk->inodes[0].size = 0;
     disk->inodes[0].n_links = 2;
     disk->inodes[0].hard_links[0] = disk->super_block->first_data_block;
@@ -126,7 +127,7 @@ int fs_mkfs(void)
     {
         if (i < N_INODES)
         {
-            disk->inodes[i].type = INODE_EMPTY;
+            disk->inodes[i].type = TYPE_EMPTY;
             disk->inodes[i].size = 0;
             disk->inodes[i].n_links = 0;
         }

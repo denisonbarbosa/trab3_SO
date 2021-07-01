@@ -108,7 +108,7 @@ typedef unsigned long ulong_t;
 #define FS_O_WRONLY 2
 #define FS_O_RDWR 3
 
-typedef struct {
+typedef struct fileStat_st{
     // Fill in your stat here, this is just an example
     int inodeNo;        /* the file i-node number */
     short type;         /* the file i-node type, DIRECTORY, FILE_TYPE (there's another value FREE_INODE which never appears here */
