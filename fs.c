@@ -19,7 +19,6 @@
 #define TYPE_DIR '1'
 #define TYPE_FILE '2'
 
-//TODO: inode_t: created correctly?
 typedef struct inode_s
 {
     char type;
@@ -30,7 +29,6 @@ typedef struct inode_s
     int tertiary_link;
 } inode_t;
 
-//TODO: super_block_t: created correctly?
 typedef struct super_block_s
 {
     int blocks_size;
@@ -73,7 +71,7 @@ static block_entry_t *current_dir;
 static opened_file_t open_files[20];
 static int n_open_files;
 
-//TODO: fs_init: implementation
+//TODO: fs_init: testing
 void fs_init(void)
 {
     block_init();
@@ -103,7 +101,7 @@ void fs_init(void)
         open_files->flag = -1;
 }
 
-//TODO: fs_mkfs: implementation
+//TODO: fs_mkfs: testing
 int fs_mkfs(void)
 {
     disk->super_block->blocks_size = BLOCK_SIZE;
@@ -149,7 +147,7 @@ int fs_mkfs(void)
     return 0;
 }
 
-//TODO: fs_open: implementation
+//TODO: fs_open: testing
 int fs_open(char *fileName, int flags)
 {
     inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
@@ -239,7 +237,7 @@ int fs_open(char *fileName, int flags)
     return -1;
 }
 
-//TODO: fs_close: implementation
+//TODO: fs_close: testing
 int fs_close(int fd)
 {
     if (fd < 20)
@@ -250,7 +248,7 @@ int fs_close(int fd)
     return -1;
 }
 
-//TODO: fs_read: implementation
+//TODO: fs_read: testing
 int fs_read(int fd, char *buf, int count)
 {
     if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY)
@@ -282,7 +280,7 @@ int fs_lseek(int fd, int offset)
     return -1;
 }
 
-//TODO: fs_mkdir: implementation
+//TODO: fs_mkdir: testing
 int fs_mkdir(char *fileName)
 {
     inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
@@ -291,7 +289,7 @@ int fs_mkdir(char *fileName)
     for (int i = 0; i < current_dir_inode.n_links; i++)
     {
         block_read(current_dir_inode.hard_links[i], (char *)aux);
-        if (aux->name == fileName)
+        if (same_string(aux->name,fileName))
             return -1;
     }
 
@@ -332,7 +330,7 @@ int fs_mkdir(char *fileName)
     return 0;
 }
 
-//TODO: fs_rmdir: implementation
+//TODO: fs_rmdir: testing
 int fs_rmdir(char *fileName)
 {
     inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
@@ -344,7 +342,7 @@ int fs_rmdir(char *fileName)
     {
         block_read(current_dir_inode.hard_links[i], (char*)aux);
 
-        if (aux->name == fileName)
+        if (same_string(aux->name,fileName))
         {
             if (aux->type != TYPE_DIR)
                 return -1;
@@ -374,10 +372,27 @@ int fs_rmdir(char *fileName)
     return 0;
 }
 
-//TODO: fs_cd: implementation
+//TODO: fs_cd: testing
 int fs_cd(char *dirName)
 {
-    return -1;
+    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    block_entry_t *aux;
+
+    int i;
+    for (i = 0; i < current_dir_inode.n_links; i++) 
+    {
+        block_read(current_dir_inode.hard_links[i], (char*)aux);
+        if (same_string(aux->name, dirName))
+        {
+            break;
+        }
+    }
+
+    if (i == current_dir_inode.n_links)
+        return -1;
+
+    current_dir = aux;
+    return 0;
 }
 
 //TODO: fs_link: implementation
