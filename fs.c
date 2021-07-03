@@ -23,6 +23,7 @@ typedef struct inode_s
 {
     char type;
     int size;
+    int link_count;
     int n_links;
     int hard_links[10];
     int secundary_link;
@@ -120,6 +121,7 @@ int fs_mkfs(void)
 
     disk->inodes[0].type = TYPE_DIR;
     disk->inodes[0].size = 0;
+    disk->inodes[0].link_count = 1;
     disk->inodes[0].n_links = 2;
     disk->inodes[0].hard_links[0] = disk->super_block->first_data_block;
     disk->bitmap[0] = '0';
@@ -140,6 +142,7 @@ int fs_mkfs(void)
         {
             disk->inodes[i].type = TYPE_EMPTY;
             disk->inodes[i].size = 0;
+            disk->inodes[i].link_count = 0;
             disk->inodes[i].n_links = 0;
         }
         disk->bitmap[i] = '1';
@@ -218,6 +221,7 @@ int fs_open(char *fileName, int flags)
 
             disk->inodes[j].type = FILE_TYPE;
             disk->inodes[j].n_links++;
+            disk->inodes[j].link_count++;
             disk->inodes[j].hard_links[0] = i;
             new_file.self_inode = j;
             new_file.self_block = i;
@@ -318,10 +322,14 @@ int fs_write(int fd, char *buf, int count)
 
 }
 
-//TODO: fs_lseek: implementation
+//TODO: fs_lseek: testing
 int fs_lseek(int fd, int offset)
 {
-    return -1;
+    if (fd > 20 || fd < 0 || open_files[fd].flag < 0)
+        return -1;
+    
+    open_files[fd].cursor = offset;
+    return open_files[fd].cursor;
 }
 
 //TODO: fs_mkdir: testing
@@ -439,23 +447,110 @@ int fs_cd(char *dirName)
     return 0;
 }
 
-//TODO: fs_link: implementation
+//TODO: fs_link: testing
 int fs_link(char *old_fileName, char *new_fileName)
 {
+    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    block_entry_t *aux;
+    int found = FALSE;
+    int i;
+
+    for (i = 0; i < current_dir_inode.n_links; i++)
+    {
+        block_read(current_dir_inode.hard_links[i], (char *)aux);
+
+        if (same_string(aux->name, old_fileName))
+        {
+            found = TRUE;
+            break;
+        }
+    }
+
+    // Remove last condition after implementation of secundary and/or tertiary links on inode_t
+    if (found && aux->type == TYPE_FILE && current_dir_inode.n_links < 10)
+    {
+        block_entry_t *new_file = (block_entry_t*)malloc(sizeof(block_entry_t));
+        new_file->name = new_fileName;
+        new_file->parent_block = aux->parent_block;
+        new_file->parent_inode = aux->parent_inode;
+        new_file->self_block = aux->self_block;
+        new_file->self_inode = aux->self_inode;
+        new_file->size = aux->size;
+        new_file->type = aux->type;
+        
+        for (i = disk->super_block->first_data_block, found = FALSE; i < N_DATA_BLOCKS; i++)
+        {
+            if(disk->bitmap[i] == '1')
+            {
+                found = TRUE;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            block_write(i, (char *)new_file);
+            current_dir_inode.hard_links[current_dir_inode.n_links++] = i;
+            return 0;
+        }
+    }
+    
     return -1;
 }
 
 //TODO: fs_unlink: implementation
 int fs_unlink(char *fileName)
 {
-    return -1;
+    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    block_entry_t *aux;
+    int found = FALSE;
+    int i;
+
+    for (i = 0; i < current_dir_inode.n_links; i++)
+    {
+        block_read(current_dir_inode.hard_links[i], (char *)aux);
+
+        if (same_string(aux->name, fileName))
+        {
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (found == FALSE || aux->type == TYPE_DIR)
+        return -1;
+    
+    // TODO
 }
 
-//TODO: fs_stat: implementation
+//TODO: fs_stat: testing
 
 int fs_stat(char *fileName, fileStat *buf)
 {
-    return -1;
+    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    block_entry_t *aux;
+    int found = FALSE;
+    int i;
+
+    for (i = 0; i < current_dir_inode.n_links; i++)
+    {
+        block_read(current_dir_inode.hard_links[i], (char *)aux);
+
+        if (same_string(aux->name, fileName))
+        {
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (found == FALSE || aux->type == TYPE_DIR)
+        return -1;
+    
+    buf->inodeNo = aux->self_inode;
+    buf->links = disk->inodes[aux->self_inode].link_count;
+    buf->numBlocks = aux->size / BLOCK_SIZE;
+    buf->size = aux->size;
+    buf->type = aux->type;
 }
 
 int fs_flush()
