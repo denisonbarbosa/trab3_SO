@@ -48,6 +48,11 @@ typedef struct disk_s
     char *bitmap; // [i] = 1 if block i is free, 0 otherwise
 } disk_t;
 
+typedef struct data_block_s
+{
+    char *content;
+} data_block_t;
+
 typedef struct block_entry_s
 {
     int self_inode;
@@ -218,7 +223,7 @@ int fs_open(char *fileName, int flags)
             new_file.self_block = i;
             disk->bitmap[i] = '0';
 
-            block_write(i, (char*)&new_file);
+            block_write(i, (char *)&new_file);
             disk->inodes[current_dir->self_inode] = current_dir_inode;
             fs_flush();
 
@@ -271,7 +276,46 @@ int fs_read(int fd, char *buf, int count)
 //TODO: fs_write: implementation
 int fs_write(int fd, char *buf, int count)
 {
-    return -1;
+    if (fd > 20)
+        return -1;
+
+    inode_t file_inode = disk->inodes[open_files[fd].file.self_inode];
+
+    int blocks_needed = count/BLOCK_SIZE;
+    int bytes_written = 0;
+
+    // Remove after implementation of secundary and/or tertiary links on inode_t
+    if ((10 - file_inode.n_links) < blocks_needed)
+        return -1;
+
+    int last_pos = open_files->file.size % BLOCK_SIZE;
+
+    char *aux;
+    block_read(file_inode.hard_links[file_inode.n_links-1], aux);
+    bcopy(buf, aux+last_pos, BLOCK_SIZE-last_pos);
+    block_write(file_inode.hard_links[file_inode.n_links-1], aux);
+
+    count -= BLOCK_SIZE-last_pos;
+    bytes_written += BLOCK_SIZE-last_pos;
+    buf = buf + BLOCK_SIZE-last_pos;
+
+    if (count <= 0 || strlen(buf) == 0)
+        return bytes_written;
+
+    blocks_needed = count / BLOCK_SIZE;
+
+    int alloc = 0;
+    for (int i = 0; i < N_DATA_BLOCKS; i++)
+    {
+        if (disk->bitmap[i] == '1')
+        {
+            file_inode.hard_links[file_inode.n_links-1] = i;
+            file_inode.n_links++;
+
+            
+        }
+    }
+
 }
 
 //TODO: fs_lseek: implementation
@@ -289,7 +333,7 @@ int fs_mkdir(char *fileName)
     for (int i = 0; i < current_dir_inode.n_links; i++)
     {
         block_read(current_dir_inode.hard_links[i], (char *)aux);
-        if (same_string(aux->name,fileName))
+        if (same_string(aux->name, fileName))
             return -1;
     }
 
@@ -340,9 +384,9 @@ int fs_rmdir(char *fileName)
     int i;
     for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i], (char*)aux);
+        block_read(current_dir_inode.hard_links[i], (char *)aux);
 
-        if (same_string(aux->name,fileName))
+        if (same_string(aux->name, fileName))
         {
             if (aux->type != TYPE_DIR)
                 return -1;
@@ -360,9 +404,9 @@ int fs_rmdir(char *fileName)
     disk->inodes[aux->self_inode].type = TYPE_EMPTY;
     disk->bitmap[current_dir_inode.hard_links[i]] = '1';
 
-    for (int j = i; j < current_dir_inode.n_links-1; j++)
+    for (int j = i; j < current_dir_inode.n_links - 1; j++)
     {
-        current_dir_inode.hard_links[j] = current_dir_inode.hard_links[j+1];
+        current_dir_inode.hard_links[j] = current_dir_inode.hard_links[j + 1];
     }
     current_dir_inode.n_links--;
     disk->inodes[current_dir->self_inode] = current_dir_inode;
@@ -379,9 +423,9 @@ int fs_cd(char *dirName)
     block_entry_t *aux;
 
     int i;
-    for (i = 0; i < current_dir_inode.n_links; i++) 
+    for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i], (char*)aux);
+        block_read(current_dir_inode.hard_links[i], (char *)aux);
         if (same_string(aux->name, dirName))
         {
             break;
