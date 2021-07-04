@@ -55,7 +55,7 @@ typedef struct block_entry_s
 
 typedef struct opened_file_s
 {
-    block_entry_t file;
+    block_entry_t *file;
     int cursor;
     int flag;
 } opened_file_t;
