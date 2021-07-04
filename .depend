@@ -1,0 +1,6 @@
+blockFake.o: blockFake.c common.h block.h
+disk_IO.o: disk_IO.c
+fs.o: fs.c util.h common.h block.h fs.h
+shell.o: shell.c util.h common.h shellutil.h fs.h
+shellutilFake.o: shellutilFake.c util.h common.h fs.h shellutil.h
+util.o: util.c common.h util.h

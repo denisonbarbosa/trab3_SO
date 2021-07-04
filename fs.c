@@ -3,75 +3,14 @@
 #include "block.h"
 #include "fs.h"
 #include <stdlib.h>
+#include "disk_IO.h"
 
-#define FAKE 1
 #ifdef FAKE
 #include <stdio.h>
 #define ERROR_MSG(m) printf m;
 #else
 #define ERROR_MSG(m)
 #endif
-
-#define FORMATTED_DISK 1
-#define N_INODES 1032
-#define N_DATA_BLOCKS 1914
-
-#define TYPE_EMPTY '0'
-#define TYPE_DIR '1'
-#define TYPE_FILE '2'
-
-typedef struct inode_s
-{
-    char type;
-    int size;
-    int link_count;
-    int n_links;
-    int hard_links[10];
-    int secundary_link;
-    int tertiary_link;
-} inode_t;
-
-typedef struct super_block_s
-{
-    int blocks_size;
-    int n_inodes;
-    int n_data_blocks;
-    int free_inodes;
-    int free_data_blocks;
-    int first_inode;
-    int first_data_block;
-    int magic_number;
-} super_block_t;
-
-typedef struct disk_s
-{
-    super_block_t *super_block;
-    inode_t *inodes;
-    char *bitmap; // [i] = 1 if block i is free, 0 otherwise
-} disk_t;
-
-typedef struct data_block_s
-{
-    char *content;
-} data_block_t;
-
-typedef struct block_entry_s
-{
-    int self_inode;
-    int parent_inode;
-    int size;
-    int self_block;
-    int parent_block;
-    char *name;
-    char type;
-} block_entry_t;
-
-typedef struct opened_file_s
-{
-    block_entry_t file;
-    int cursor;
-    int flag;
-} opened_file_t;
 
 static disk_t *disk;
 static block_entry_t *current_dir;
@@ -82,7 +21,8 @@ static block_entry_t *aux;
 //TODO: fs_init: testing
 void fs_init(void)
 {
-    block_init();
+    // block_init();
+
     disk = (disk_t *)malloc(sizeof(disk_t));
     disk->super_block = (super_block_t *)malloc(sizeof(super_block_t));
     disk->inodes = (inode_t *)malloc(N_INODES * sizeof(inode_t));
@@ -90,22 +30,26 @@ void fs_init(void)
     open_files = (opened_file_t *)malloc(20 * sizeof(opened_file_t));
     current_dir = (block_entry_t *)malloc(sizeof(block_entry_t));
 
-    block_read(0, (char *)disk->super_block);
+    init_disk_IO(disk);
+
+    super_read(disk->super_block);
 
     if (disk->super_block->magic_number == 0)
     {
         fs_mkfs();
+        printf("cheguei aqui \n");
     }
     else
     {
-        for (int i = 0; i < 4; i++)
-            block_read(i + 1, (char *)(disk->bitmap + i * BLOCK_SIZE));
+        bitmap_read(disk->bitmap);
 
-        for (int i = 0; i < (BLOCK_SIZE / N_INODES); i++)
-            block_read((i + 5), (char *)disk->inodes + (8 * i));
+        for (int i = 0; i < N_INODES; i++)
+        {
+            inode_read(i, &(disk->inodes[i]));
+        }
     }
 
-    block_read(disk->super_block->first_data_block, (char *)current_dir);
+    entry_read(0, current_dir);
 
     for (int i = 0; i < 20; i++)
         open_files[i].flag = -1;
@@ -155,9 +99,9 @@ int fs_mkfs(void)
     root->size = 0;
     root->type = TYPE_DIR;
 
-    block_write(disk->super_block->first_data_block, (char *)root);
-
     printf("Filesystem made\n");
+
+    entry_write(0, root);
 
     return 0;
 }
@@ -174,7 +118,7 @@ int fs_open(char *fileName, int flags)
     for (int i = 0; i < current_dir_inode.n_links; i++)
     {
         printf("AQUI 2\n");
-        block_read(current_dir_inode.hard_links[i] + disk->super_block->first_data_block, aux);
+        entry_read(current_dir_inode.hard_links[i], aux);
         printf("AQUI 3\n");
 
         printf("%s\n", aux->name);
@@ -220,7 +164,7 @@ int fs_open(char *fileName, int flags)
         if (current_dir_inode.n_links < 10)
         {
             current_dir_inode.hard_links[current_dir_inode.n_links++] = i;
-            block_entry_t *new_file = (block_entry_t*)malloc(sizeof(block_entry_t));
+            block_entry_t *new_file = (block_entry_t *)malloc(sizeof(block_entry_t));
             new_file->name = fileName;
             new_file->parent_inode = current_dir->self_inode;
             new_file->size = 0;
@@ -247,15 +191,17 @@ int fs_open(char *fileName, int flags)
 
             printf("Inode allocated for new file: %d\n", new_file->self_inode);
 
-            block_write(i + disk->super_block->first_data_block, (char*)new_file);
+            entry_write(i, new_file);
+            // block_write(i + disk->super_block->first_data_block, (char*)new_file);
+
             printf("File:\n %s\n %s\n", new_file->name, new_file);
-            
+
             disk->inodes[current_dir->self_inode] = current_dir_inode;
             fs_flush();
 
-            block_entry_t *file_written = malloc(BLOCK_SIZE * sizeof(char));
-            block_read(i + disk->super_block->first_data_block, file_written);
-            printf("File:\n %s\n %s\n", file_written->name ,file_written);
+            // block_entry_t *file_written = malloc(BLOCK_SIZE * sizeof(char));
+            // block_read(i + disk->super_block->first_data_block, file_written);
+            // printf("File:\n %s\n %s\n", file_written->name ,file_written);
 
             for (int i = 0; i < 20; i++)
             {
@@ -297,16 +243,16 @@ int fs_read(int fd, char *buf, int count)
     if (open_files[fd].file.size - cursor < count)
         count = open_files[fd].file.size - cursor;
 
-    char *block = (char*)malloc(sizeof(char)*BLOCK_SIZE);
-    
+    char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
+
     // PEGA O INODE DO FD
     inode_t file_inode = disk->inodes[open_files[fd].file.self_inode];
 
     // ACHA QUAL BLOCO TÁ O CURSOR
 
-    // LE 
-
-    block_read(file_inode.hard_links[0] + disk->super_block->first_data_block, block);
+    // LE
+    content_read(file_inode.hard_links[0], block);
+    // block_read(file_inode.hard_links[0] + disk->super_block->first_data_block, block);
     bcopy((block + cursor), buf, count);
     open_files[fd].cursor += count;
     return count;
@@ -339,13 +285,15 @@ int fs_write(int fd, char *buf, int count)
         int remaining_space = BLOCK_SIZE - (open_files[fd].file.size % BLOCK_SIZE);
 
         // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
-        block_read(file_inode.hard_links[file_inode.n_links - 1] + disk->super_block->first_data_block, aux_string);
+        content_read(file_inode.hard_links[file_inode.n_links - 1], aux_string);
+        // block_read(file_inode.hard_links[file_inode.n_links - 1] + disk->super_block->first_data_block, aux_string);
 
         bcopy(buf, (aux_string + (open_files[fd].file.size % BLOCK_SIZE)), remaining_space);
 
-        block_write(file_inode.hard_links[file_inode.n_links - 1] + disk->super_block->first_data_block, aux_string);
+        content_write(file_inode.hard_links[file_inode.n_links - 1], aux_string);
+        // block_write(file_inode.hard_links[file_inode.n_links - 1] + disk->super_block->first_data_block, aux_string);
 
-        printf("block where buf was written: %d\n",file_inode.hard_links[file_inode.n_links - 1]);
+        printf("block where buf was written: %d\n", file_inode.hard_links[file_inode.n_links - 1]);
 
         count -= remaining_space;
         bytes_written += remaining_space;
@@ -366,7 +314,8 @@ int fs_write(int fd, char *buf, int count)
         // ESCREVE NO BLOCO ALOCADO
         printf("block where buf was written: %d\n", i);
 
-        block_write(i + disk->super_block->first_data_block, buf);
+        content_write(i, buf);
+        // block_write(i + disk->super_block->first_data_block, buf);
 
         if (count > BLOCK_SIZE)
         {
@@ -383,7 +332,9 @@ int fs_write(int fd, char *buf, int count)
         }
     }
     disk->inodes[open_files[fd].file.self_inode] = file_inode;
-    block_write(open_files[fd].file.self_block + disk->super_block->first_data_block, &open_files[fd].file);
+
+    entry_write(open_files[fd].file.self_block, &open_files[fd].file);
+    // block_write(open_files[fd].file.self_block + disk->super_block->first_data_block, &open_files[fd].file);
     fs_flush();
     return bytes_written;
 }
@@ -675,13 +626,12 @@ int fs_ls()
 
 int fs_flush()
 {
-    block_write(0, (char *)disk->super_block);
+    super_write(disk->super_block);
 
-    for (int i = 0; i < 4; i++)
-        block_write(i + 1, (char *)(disk->bitmap + (i * BLOCK_SIZE)));
+    bitmap_write(disk->bitmap);
 
-    for (int i = 0; i < (N_INODES / 8); i++)
-        block_write(i + 5, (char *)(disk->inodes + i * 8));
+    for (int i = 0; i < N_INODES; i++)
+        inode_write(i, &disk->inodes[i]);
 
     return 0;
 }

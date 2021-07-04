@@ -5,13 +5,16 @@ CFLAGS = -fno-builtin-strlen -fno-builtin-bcopy -fno-builtin-bzero
 
 CCOPTS = -Wall -O1 -c
 
-FAKESHELL_OBJS = shellFake.o shellutilFake.o utilFake.o fsFake.o blockFake.o
+FAKESHELL_OBJS = shellFake.o shellutilFake.o utilFake.o fsFake.o blockFake.o disk_IO.o
 
 # Makefile targets
 all: lnxsh
 
 lnxsh: $(FAKESHELL_OBJS)
 	$(CC) -o lnxsh $(FAKESHELL_OBJS)
+
+disk_IO.o: disk_IO.c
+	$(CC) -Wall $(CFLAGS) -g -c -DFAKE -o disk_IO.o disk_IO.c
 
 shellFake.o : shell.c
 	$(CC) -Wall $(CFLAGS) -g -c -DFAKE -o shellFake.o shell.c
