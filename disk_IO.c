@@ -62,14 +62,14 @@ int content_write(int block, char *buffer)
     return fwrite(buffer, 1, BLOCK, util_fd);
 }
 
-int super_read(super_block_t *super_block)
+int super_read(super_block_t **super_block)
 {
     fseek(util_fd, 0, SEEK_SET);
 
-    return fread(super_block, sizeof(super_block_t), 1, util_fd);
+    return fread(*super_block, sizeof(super_block_t), 1, util_fd);
 }
 
-int inode_read(int n, inode_t *inode)
+int inode_read(int n, inode_t **inode)
 {
     int block = n / 8;
     block += util_disk->super_block->first_inode;
@@ -78,31 +78,36 @@ int inode_read(int n, inode_t *inode)
 
     fseek(util_fd, ((block * BLOCK) + (offset * sizeof(inode_t))), SEEK_SET);
 
-    return fread(inode, sizeof(inode_t), 1, util_fd);
+    return fread(*inode, sizeof(inode_t), 1, util_fd);
 }
 
-int entry_read(int n, block_entry_t *entry)
+int entry_read(int n, block_entry_t **entry)
 {
     int block = n;
     block += util_disk->super_block->first_data_block;
 
     fseek(util_fd, (block * BLOCK), SEEK_SET);
 
-    return fread(entry, sizeof(block_entry_t), 1, util_fd);
+    fread(*entry, sizeof(block_entry_t), 1, util_fd);
+
+    printf("block read: %d\nentry value: %s\n", block, (*entry)->name);
+
+
+    return 1;
 }
 
-int bitmap_read(char *bitmap)
+int bitmap_read(char **bitmap)
 {
     fseek(util_fd, BLOCK, SEEK_SET);
 
-    return fread(bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
+    return fread(*bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
 }
 
-int content_read(int block, char *buffer)
+int content_read(int block, char **buffer)
 {
     block += util_disk->super_block->first_data_block;
 
     fseek(util_fd, (block * BLOCK), SEEK_SET);
 
-    return fread(buffer, 1, BLOCK, util_fd);
+    return fread(*buffer, 1, BLOCK, util_fd);
 }

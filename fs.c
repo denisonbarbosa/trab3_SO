@@ -31,7 +31,7 @@ void fs_init(void)
 
     init_disk_IO(disk);
 
-    super_read(disk->super_block);
+    super_read(&disk->super_block);
 
     if (disk->super_block->magic_number == 0)
     {
@@ -47,7 +47,7 @@ void fs_init(void)
         }
     }
 
-    entry_read(0, current_dir);
+    entry_read(0, &current_dir);
 
     for (int i = 0; i < 20; i++)
         open_files[i].flag = -1;
@@ -108,7 +108,7 @@ int fs_open(char *fileName, int flags)
     int i = 0;
     for (i = 0; i < current_inode->n_links; i++)
     {
-        entry_read(current_inode->hard_links[i], aux);
+        entry_read(current_inode->hard_links[i], &aux);
         if (same_string(aux->name, fileName))
         {
             break;
@@ -222,7 +222,7 @@ int fs_read(int fd, char *buf, int count)
     // ACHA QUAL BLOCO TÁ O CURSOR
 
     // LE
-    content_read(file_inode->hard_links[0], block);
+    content_read(file_inode->hard_links[0], &block);
     bcopy((block + cursor), buf, count);
     open_files[fd].cursor += count;
     return count;
@@ -253,7 +253,7 @@ int fs_write(int fd, char *buf, int count)
         int remaining_space = BLOCK_SIZE - (open_files[fd].file->size % BLOCK_SIZE);
 
         // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
-        content_read(file_inode.hard_links[file_inode.n_links - 1], aux_string);
+        content_read(file_inode.hard_links[file_inode.n_links - 1], &aux_string);
 
         bcopy(buf, (aux_string + (open_files[fd].file->size % BLOCK_SIZE)), remaining_space);
 
@@ -321,7 +321,7 @@ int fs_mkdir(char *fileName)
 
     for (int i = 0; i < current_dir_inode->n_links; i++)
     {
-        entry_read(current_dir_inode->hard_links[i], aux);
+        entry_read(current_dir_inode->hard_links[i], &aux);
         printf("comparing dirname now\n");
         if (same_string(aux->name, fileName))
             return -1;
@@ -434,7 +434,7 @@ int fs_cd(char *dirName)
     int i;
     for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        entry_read(current_dir_inode.hard_links[i], aux);
+        entry_read(current_dir_inode.hard_links[i], &aux);
         if (same_string(aux->name, dirName))
         {
             break;
@@ -567,12 +567,12 @@ int fs_stat(char *fileName, fileStat *buf)
 int fs_ls()
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
-    block_entry_t *aux;
+    char *aux;
     int col;
     for (int i = 0; i < current_dir_inode->n_links; i++)
     {
-        aux = (block_entry_t *)malloc(sizeof(block_entry_t));
-        entry_read(current_dir_inode->hard_links[i], aux);
+        aux = (char*)malloc(sizeof(block_entry_t));
+        entry_read(current_dir_inode->hard_links[i], &aux);
         
         printf("%s\n", aux);
         
