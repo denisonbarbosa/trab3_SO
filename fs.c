@@ -99,6 +99,8 @@ int fs_mkfs(void)
     root->size = 0;
     root->type = TYPE_DIR;
 
+    entry_write(root->self_block, root);
+
     return 0;
 }
 
@@ -181,7 +183,7 @@ int fs_open(char *fileName, int flags)
 
     entry_write(i, (new_file));
 
-    entry_write(current_dir->self_block, &current_dir);
+    entry_write(current_dir->self_block, current_dir);
 
     // RETORNA DESCRITOR DO NOVO ARQUIVO
     for (int c = 0; c < 20; c++)
@@ -399,7 +401,7 @@ int fs_mkdir(char *fileName)
     current_dir_inode->hard_links[current_dir_inode->n_links++] = i;
 
     inode_write(current_dir->self_inode, current_dir_inode);
-    entry_write(current_dir->self_block, &current_dir);
+    entry_write(current_dir->self_block, current_dir);
     entry_write(new_dir->self_block, new_dir);
 
     return 0;
@@ -498,7 +500,7 @@ int fs_link(char *old_fileName, char *new_fileName)
 
     for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i] + disk->super_block->first_data_block, (char *)aux);
+        entry_read(current_dir_inode.hard_links[i], &aux);
 
         if (same_string(aux->name, old_fileName))
         {
@@ -530,7 +532,7 @@ int fs_link(char *old_fileName, char *new_fileName)
 
         if (found)
         {
-            block_write(i + disk->super_block->first_data_block, (char *)new_file);
+            entry_write(i, new_file);
             current_dir_inode.hard_links[current_dir_inode.n_links++] = i;
             fs_flush();
             return 0;
@@ -552,7 +554,7 @@ int fs_unlink(char *fileName)
 
     for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i] + disk->super_block->first_data_block, (char *)aux);
+        entry_read(current_dir_inode.hard_links[i], &aux);
 
         if (same_string(aux->name, fileName))
         {
