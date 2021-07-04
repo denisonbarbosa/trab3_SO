@@ -194,7 +194,7 @@ int fs_open(char *fileName, int flags)
             entry_write(i, new_file);
             // block_write(i + disk->super_block->first_data_block, (char*)new_file);
 
-            printf("File:\n %s\n %s\n", new_file->name, new_file);
+            printf("File:\n %s\n %s\n", new_file->name, (char*)new_file);
 
             disk->inodes[current_dir->self_inode] = current_dir_inode;
             fs_flush();
@@ -235,25 +235,43 @@ int fs_read(int fd, char *buf, int count)
     if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY)
         return -1;
 
-    if (count == 0)
-        return 0;
-
+    int i = 0;
     int cursor = open_files[fd].cursor;
-    printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file.size, cursor, count);
     if (open_files[fd].file.size - cursor < count)
         count = open_files[fd].file.size - cursor;
-
-    char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
+    
+    if (count == 0)
+        return 0;
+printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file.size, cursor, count);
+    
+    char *block = (char*)malloc(sizeof(char)*BLOCK_SIZE);
+    buf = (char*)malloc(sizeof(char)*count);
 
     // PEGA O INODE DO FD
-    inode_t file_inode = disk->inodes[open_files[fd].file.self_inode];
+    inode_t *file_inode = &disk->inodes[open_files[fd].file.self_inode];
 
     // ACHA QUAL BLOCO TÁ O CURSOR
-
+    int block_index = cursor/BLOCK_SIZE;
+    int offset = cursor%BLOCK_SIZE;
     // LE
-    content_read(file_inode.hard_links[0], block);
+    content_read(file_inode->hard_links[block_index], block);
     // block_read(file_inode.hard_links[0] + disk->super_block->first_data_block, block);
-    bcopy((block + cursor), buf, count);
+    printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
+    if (BLOCK_SIZE-offset < count)
+    {
+        bcopy((block + offset), buf, BLOCK_SIZE-offset);
+        for (i = 1; (i+1)*BLOCK_SIZE-offset < count; i++)
+        {
+            content_read(file_inode->hard_links[block_index+i], block);
+            bcopy(block, buf+i*BLOCK_SIZE, BLOCK_SIZE);
+        }
+    }
+    printf("i: %d\n", i);
+    content_read(file_inode->hard_links[block_index+i], block);
+    printf("block: %s\n", block);
+    bcopy(block, buf+i*BLOCK_SIZE, BLOCK_SIZE-count%BLOCK_SIZE);
+    for ( i = 0; i < count; i++) 
+			writeChar( buf[i]);
     open_files[fd].cursor += count;
     return count;
 }

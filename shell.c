@@ -323,7 +323,7 @@ static void shell_cat( void) {
 	
 	do {
 		n = fs_read( fd, buf, 256);
-		printf("%d\n", n);
+		printf("n: %d\n", n);
 		for ( i = 0; i < n; i++) 
 			writeChar( buf[i]);
 	} while ( n > 0);
