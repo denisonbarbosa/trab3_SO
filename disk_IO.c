@@ -53,13 +53,13 @@ int bitmap_write(char *bitmap)
     return fwrite(bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
 }
 
-int content_write(int block, char *buffer)
+int content_write(int block, char *buffer, int count)
 {
     block += util_disk->super_block->first_data_block;
 
     fseek(util_fd, block * BLOCK, SEEK_SET);
 
-    return fwrite(buffer, 1, BLOCK, util_fd);
+    return fwrite(buffer, 1, count, util_fd);
 }
 
 int super_read(super_block_t **super_block)

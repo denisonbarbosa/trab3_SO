@@ -273,24 +273,31 @@ int fs_write(int fd, char *buf, int count)
     // VE SE TEM ESPAÇO NO ULTIMO ALOCADO
     if (open_files[fd].file->size % BLOCK_SIZE > 0)
     {
-        char *aux_string = (char*) malloc((open_files[fd].file->size % BLOCK_SIZE) * sizeof(char));
-        char *block = (char*) malloc(BLOCK * sizeof(char));
+        char *aux_string = (char *)malloc((open_files[fd].file->size % BLOCK_SIZE) * sizeof(char));
+        char *block = (char *)malloc(BLOCK * sizeof(char));
 
         int remaining_space = BLOCK_SIZE - (open_files[fd].file->size % BLOCK_SIZE);
 
         // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
-        content_read(file_inode.hard_links[file_inode.n_links - 1], &aux_string);
+        int buf_size = strlen(buf);
+        if (buf_size > remaining_space)
+        {
+            content_write(file_inode.hard_links[file_inode.n_links - 1], buf, remaining_space);
+            count -= remaining_space;
+            bytes_written += remaining_space;
+            buf = buf + remaining_space;
+            open_files[fd].file->size += remaining_space;
+        }
+        else
+        {
+            content_write(file_inode.hard_links[file_inode.n_links - 1], buf, buf_size);
+            count -= buf_size;
+            bytes_written += buf_size;
+            buf = buf + buf_size;
+            open_files[fd].file->size += buf_size;
+        }
 
-        bcopy(aux_string, block, strlen(aux_string));
-
-        bcopy(buf, (block + (open_files[fd].file->size % BLOCK_SIZE)), remaining_space);
-
-        content_write(file_inode.hard_links[file_inode.n_links - 1], block);
-
-        count -= remaining_space;
-        bytes_written += remaining_space;
-        buf = buf + remaining_space;
-        open_files[fd].file->size += remaining_space;
+        printf("count: %d\nbytes_written: %d\nremaining space: %d\n", count, bytes_written, remaining_space);
     }
 
     while (count > 0)
@@ -305,10 +312,9 @@ int fs_write(int fd, char *buf, int count)
 
         // ESCREVE NO BLOCO ALOCADO
 
-        content_write(i, buf);
-
         if (count > BLOCK_SIZE)
         {
+            content_write(i, buf, BLOCK_SIZE);
             count -= BLOCK_SIZE;
             bytes_written += BLOCK_SIZE;
             buf = buf + BLOCK_SIZE;
@@ -316,6 +322,7 @@ int fs_write(int fd, char *buf, int count)
         }
         else
         {
+            content_write(i, buf, count);
             bytes_written += count;
             open_files[fd].file->size += count;
             count = 0;
