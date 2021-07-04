@@ -1,7 +1,9 @@
 #include "util.h"
 #include "common.h"
 #include "shellutil.h"
+#include <stdio.h>
 
+#define FAKE 1
 #ifdef FAKE
 #define START main
 #include "fs.h"
@@ -249,7 +251,9 @@ static void shell_cd( void) {
 //TODO: shell_ls: implementation
 static void shell_ls( void) {
 	//should a system call print to the screen?
-	writeStr("Problem with ls\n");
+	// writeStr("Problem with ls\n");
+
+	fs_ls();
 	
 //Code/pseudocode you can use somewhere to get the same ls output as the tests
 //  writeStr("Name");
@@ -311,7 +315,7 @@ static void shell_cat( void) {
 	int fd, n, i;
 	char buf[256];
 	
-	fd = fs_open( argv[1], FS_O_RDONLY);
+	fd = fs_open(argv[1], FS_O_RDONLY);
 	if ( fd < 0) {
 		writeStr( "Cat failed\n");
 		return;
@@ -319,6 +323,7 @@ static void shell_cat( void) {
 	
 	do {
 		n = fs_read( fd, buf, 256);
+		printf("%d\n", n);
 		for ( i = 0; i < n; i++) 
 			writeChar( buf[i]);
 	} while ( n > 0);
