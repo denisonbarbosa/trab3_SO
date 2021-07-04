@@ -14,7 +14,7 @@ int bitmap_write(char *bitmap);
 
 int content_write(int block, char* buffer);
 
-int inode_read(int n, inode_t **inode);
+int inode_read(int n, inode_t *inode);
 
 int entry_read(int n, block_entry_t **entry);
 

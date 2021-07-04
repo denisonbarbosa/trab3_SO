@@ -69,7 +69,7 @@ int super_read(super_block_t **super_block)
     return fread(*super_block, sizeof(super_block_t), 1, util_fd);
 }
 
-int inode_read(int n, inode_t **inode)
+int inode_read(int n, inode_t *inode)
 {
     int block = n / 8;
     block += util_disk->super_block->first_inode;
@@ -78,7 +78,7 @@ int inode_read(int n, inode_t **inode)
 
     fseek(util_fd, ((block * BLOCK) + (offset * sizeof(inode_t))), SEEK_SET);
 
-    return fread(*inode, sizeof(inode_t), 1, util_fd);
+    return fread(inode, sizeof(inode_t), 1, util_fd);
 }
 
 int entry_read(int n, block_entry_t **entry)
@@ -89,9 +89,6 @@ int entry_read(int n, block_entry_t **entry)
     fseek(util_fd, (block * BLOCK), SEEK_SET);
 
     fread(*entry, sizeof(block_entry_t), 1, util_fd);
-
-    printf("block read: %d\nentry value: %s\n", block, (*entry)->name);
-
 
     return 1;
 }

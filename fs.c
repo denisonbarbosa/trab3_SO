@@ -32,6 +32,7 @@ void fs_init(void)
     init_disk_IO(disk);
 
     super_read(&disk->super_block);
+    printf("superblock read\n");
 
     if (disk->super_block->magic_number == 0)
     {
@@ -39,15 +40,18 @@ void fs_init(void)
     }
     else
     {
-        bitmap_read(disk->bitmap);
+        bitmap_read(&disk->bitmap);
+        printf("bitmap read\n");
 
         for (int i = 0; i < N_INODES; i++)
         {
-            inode_read(i, &(disk->inodes[i]));
+            inode_read(i, &disk->inodes[i]);
         }
+        printf("inodes read\n");
     }
 
     entry_read(0, &current_dir);
+    printf("root_dir read\n");
 
     for (int i = 0; i < 20; i++)
         open_files[i].flag = -1;
@@ -116,11 +120,10 @@ int fs_open(char *fileName, int flags)
     }
 
     // SE SIM, RETORNA DESCRITOR PRA ELE
-    if (aux->type == TYPE_DIR && flags > 1)
-        return -1;
-
     if (i < current_inode->n_links)
     {
+        if (aux->type == TYPE_DIR && flags > 1)
+            return -1;
         for (int j = 0; j < 20; j++)
         {
             if (open_files[j].flag == -1)
@@ -170,10 +173,15 @@ int fs_open(char *fileName, int flags)
     disk->inodes[j].type = TYPE_FILE;
     inode_write(j, &disk->inodes[j]);
 
+    current_dir->size++;
+    current_inode->size++;
+
     current_inode->hard_links[current_inode->n_links++] = i;
     inode_write(current_dir->self_inode, current_inode);
 
     entry_write(i, (new_file));
+
+    entry_write(current_dir->self_block, &current_dir);
 
     // RETORNA DESCRITOR DO NOVO ARQUIVO
     for (int c = 0; c < 20; c++)
@@ -204,47 +212,47 @@ int fs_close(int fd)
 //TODO: fs_read: testing
 int fs_read(int fd, char *buf, int count)
 {
-    if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY)
+    int cursor = open_files[fd].cursor;
+
+    if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY || open_files[fd].file->size < cursor)
         return -1;
 
     int i = 0;
-    int cursor = open_files[fd].cursor;
-    if (open_files[fd].file.size - cursor < count)
-        count = open_files[fd].file.size - cursor;
-    
+
+    if (open_files[fd].file->size - cursor < count)
+        count = open_files[fd].file->size - cursor;
+
     if (count == 0)
         return 0;
-printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file.size, cursor, count);
-    
-    char *block = (char*)malloc(sizeof(char)*BLOCK_SIZE);
-    buf = (char*)malloc(sizeof(char)*count);
+    // printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file->size, cursor, count);
 
-    char *block = malloc(BLOCK_SIZE * sizeof(char));
-    
+    char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
+    buf = (char *)malloc(sizeof(char) * count);
+
     // PEGA O INODE DO FD
-    inode_t *file_inode = &disk->inodes[open_files[fd].file.self_inode];
+    inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
 
     // ACHA QUAL BLOCO TÁ O CURSOR
-    int block_index = cursor/BLOCK_SIZE;
-    int offset = cursor%BLOCK_SIZE;
+    int block_index = cursor / BLOCK_SIZE;
+    int offset = cursor % BLOCK_SIZE;
     // LE
-    content_read(file_inode->hard_links[block_index], block);
-    // block_read(file_inode.hard_links[0] + disk->super_block->first_data_block, block);
-    printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
+    content_read(file_inode->hard_links[block_index], &block);
+    // printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
     {
-        bcopy((block + offset), buf, BLOCK_SIZE-offset);
-        for (i = 1; (i+1)*BLOCK_SIZE-offset < count; i++)
+        bcopy((block + offset), buf, BLOCK_SIZE - offset);
+        for (i = 1; (i + 1) * BLOCK_SIZE - offset < count; i++)
         {
-            content_read(file_inode->hard_links[block_index+i], block);
-            bcopy(block, buf+i*BLOCK_SIZE, BLOCK_SIZE);
+            content_read(file_inode->hard_links[block_index + i], &block);
+            bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE);
         }
     }
-    printf("i: %d\n", i);
-    content_read(file_inode->hard_links[block_index+i], block);
-    printf("block: %s\n", block);
-    bcopy(block, buf+i*BLOCK_SIZE, BLOCK_SIZE-count%BLOCK_SIZE);
-    for ( i = 0; i < count; i++) 
-			writeChar( buf[i]);
+    // printf("i: %d\n", i);
+    content_read(file_inode->hard_links[block_index + i], &block);
+    // printf("block: %s\n", block);
+
+    bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE - count % BLOCK_SIZE);
+}
+
 //TODO: fs_write: implementation
 int fs_write(int fd, char *buf, int count)
 {
@@ -262,19 +270,22 @@ int fs_write(int fd, char *buf, int count)
     if ((10 - file_inode.n_links) * BLOCK_SIZE < count)
         return -1;
 
-    char *aux_string = malloc(BLOCK_SIZE * sizeof(char));
-
     // VE SE TEM ESPAÇO NO ULTIMO ALOCADO
     if (open_files[fd].file->size % BLOCK_SIZE > 0)
     {
+        char *aux_string = (char*) malloc((open_files[fd].file->size % BLOCK_SIZE) * sizeof(char));
+        char *block = (char*) malloc(BLOCK * sizeof(char));
+
         int remaining_space = BLOCK_SIZE - (open_files[fd].file->size % BLOCK_SIZE);
 
         // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
         content_read(file_inode.hard_links[file_inode.n_links - 1], &aux_string);
 
-        bcopy(buf, (aux_string + (open_files[fd].file->size % BLOCK_SIZE)), remaining_space);
+        bcopy(aux_string, block, strlen(aux_string));
 
-        content_write(file_inode.hard_links[file_inode.n_links - 1], aux_string);
+        bcopy(buf, (block + (open_files[fd].file->size % BLOCK_SIZE)), remaining_space);
+
+        content_write(file_inode.hard_links[file_inode.n_links - 1], block);
 
         count -= remaining_space;
         bytes_written += remaining_space;
@@ -312,7 +323,6 @@ int fs_write(int fd, char *buf, int count)
     }
     disk->inodes[open_files[fd].file->self_inode] = file_inode;
 
-
     entry_write(open_files[fd].file->self_block, open_files[fd].file);
     fs_flush();
     return bytes_written;
@@ -339,7 +349,6 @@ int fs_mkdir(char *fileName)
     for (int i = 0; i < current_dir_inode->n_links; i++)
     {
         entry_read(current_dir_inode->hard_links[i], &aux);
-        printf("comparing dirname now\n");
         if (same_string(aux->name, fileName))
             return -1;
     }
@@ -347,21 +356,20 @@ int fs_mkdir(char *fileName)
     if (current_dir_inode->n_links == 10)
         return -1;
 
-    
     int i = 0;
     while (i < N_DATA_BLOCKS && disk->bitmap[i] != '1')
         i++;
-    
+
     if (i >= N_DATA_BLOCKS)
         return -1;
 
     disk->bitmap[i] = '0';
     bitmap_write(disk->bitmap);
-    
+
     int j = 0;
     while (j < N_INODES && disk->inodes[j].type != TYPE_EMPTY)
         j++;
-    
+
     block_entry_t *new_dir = malloc(sizeof(block_entry_t));
     new_dir->name = malloc(MAX_FILE_NAME * sizeof(char));
     bcopy(fileName, new_dir->name, strlen(fileName));
@@ -372,6 +380,9 @@ int fs_mkdir(char *fileName)
     new_dir->self_block = i;
     new_dir->self_inode = j;
 
+    current_dir_inode->size++;
+    current_dir->size++;
+
     disk->inodes[j].type = TYPE_DIR;
     disk->inodes[j].link_count = 1;
     disk->inodes[j].n_links = 0;
@@ -379,8 +390,9 @@ int fs_mkdir(char *fileName)
     inode_write(j, &disk->inodes[j]);
 
     current_dir_inode->hard_links[current_dir_inode->n_links++] = i;
-    inode_write(current_dir->self_inode, current_dir_inode);
 
+    inode_write(current_dir->self_inode, current_dir_inode);
+    entry_write(current_dir->self_block, &current_dir);
     entry_write(new_dir->self_block, new_dir);
 
     return 0;
@@ -389,16 +401,16 @@ int fs_mkdir(char *fileName)
 //TODO: fs_rmdir: testing
 int fs_rmdir(char *fileName)
 {
-    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
 
     block_entry_t *aux;
     aux = (block_entry_t *)malloc(sizeof(block_entry_t));
 
-    inode_t aux_inode;
+    inode_t *aux_inode;
     int i;
-    for (i = 0; i < current_dir_inode.n_links; i++)
+    for (i = 0; i < current_dir_inode->n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i] + disk->super_block->first_data_block, (char *)aux);
+        entry_read(current_dir_inode->hard_links[i], &aux);
 
         if (same_string(aux->name, fileName))
         {
@@ -408,22 +420,22 @@ int fs_rmdir(char *fileName)
         }
     }
 
-    if (i == current_dir_inode.n_links)
+    if (i == current_dir_inode->n_links)
         return -1;
 
-    aux_inode = disk->inodes[aux->self_inode];
-    if (aux_inode.n_links > 0)
+    aux_inode = &disk->inodes[aux->self_inode];
+    if (aux_inode->n_links > 0)
         return -1;
 
     disk->inodes[aux->self_inode].type = TYPE_EMPTY;
-    disk->bitmap[current_dir_inode.hard_links[i]] = '1';
+    disk->bitmap[current_dir_inode->hard_links[i]] = '1';
+    bitmap_write(disk->bitmap);
 
-    for (int j = i; j < current_dir_inode.n_links - 1; j++)
+    for (int j = i; j < current_dir_inode->n_links - 1; j++)
     {
-        current_dir_inode.hard_links[j] = current_dir_inode.hard_links[j + 1];
+        current_dir_inode->hard_links[j] = current_dir_inode->hard_links[j + 1];
     }
-    current_dir_inode.n_links--;
-    disk->inodes[current_dir->self_inode] = current_dir_inode;
+    current_dir_inode->n_links--;
 
     fs_flush();
 
@@ -433,7 +445,7 @@ int fs_rmdir(char *fileName)
 //TODO: fs_cd: testing
 int fs_cd(char *dirName)
 {
-    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
     block_entry_t *aux;
     aux = (block_entry_t *)malloc(sizeof(block_entry_t));
 
@@ -444,21 +456,21 @@ int fs_cd(char *dirName)
 
     if (same_string(dirName, ".."))
     {
-        block_read(current_dir->parent_block + disk->super_block->first_data_block, current_dir);
+        entry_read(current_dir->parent_block, &current_dir);
         return 0;
     }
 
     int i;
-    for (i = 0; i < current_dir_inode.n_links; i++)
+    for (i = 0; i < current_dir_inode->n_links; i++)
     {
-        entry_read(current_dir_inode.hard_links[i], &aux);
+        entry_read(current_dir_inode->hard_links[i], &aux);
         if (same_string(aux->name, dirName))
         {
             break;
         }
     }
 
-    if (i == current_dir_inode.n_links)
+    if (i == current_dir_inode->n_links)
         return -1;
 
     current_dir = aux;
@@ -560,7 +572,7 @@ int fs_stat(char *fileName, fileStat *buf)
 
     for (i = 0; i < current_dir_inode.n_links; i++)
     {
-        block_read(current_dir_inode.hard_links[i] + disk->super_block->first_data_block, (char *)aux);
+        entry_read(current_dir_inode.hard_links[i], &aux);
 
         if (same_string(aux->name, fileName))
         {
@@ -574,9 +586,10 @@ int fs_stat(char *fileName, fileStat *buf)
 
     buf->inodeNo = aux->self_inode;
     buf->links = disk->inodes[aux->self_inode].link_count;
-    buf->numBlocks = aux->size / BLOCK_SIZE;
+    buf->numBlocks = disk->inodes[aux->self_inode].n_links;
     buf->size = aux->size;
-    buf->type = aux->type;
+
+    buf->type = atoi(&aux->type);
 
     return 0;
 }
@@ -584,23 +597,14 @@ int fs_stat(char *fileName, fileStat *buf)
 int fs_ls()
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
-    char *aux;
+    block_entry_t *aux;
     int col;
     for (int i = 0; i < current_dir_inode->n_links; i++)
     {
-        aux = (char*)malloc(sizeof(block_entry_t));
+        aux = (block_entry_t *)malloc(sizeof(block_entry_t));
         entry_read(current_dir_inode->hard_links[i], &aux);
-        
-        printf("%s\n", aux);
-        
-        // col = 0;
-        // print_str(i, col, aux->name);
-        // col += (strlen(aux->name) + 1);
-        // print_char(i, col, aux->type);
-        // col += 2;
-        // print_int(i, col, aux->self_inode);
-        // col += 5;
-        // print_int(i, col, aux->size);
+
+        printf("%s %c %d %d\n", aux->name, aux->type, aux->self_inode, aux->size);
     }
     return 0;
 }
