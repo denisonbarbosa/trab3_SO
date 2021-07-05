@@ -53,11 +53,11 @@ int bitmap_write(char *bitmap)
     return fwrite(bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
 }
 
-int content_write(int block, char *buffer, int count)
+int content_write(int block, char *buffer, int offset, int count)
 {
     block += util_disk->super_block->first_data_block;
 
-    fseek(util_fd, block * BLOCK, SEEK_SET);
+    fseek(util_fd, (block * BLOCK) + offset , SEEK_SET);
 
     return fwrite(buffer, 1, count, util_fd);
 }
@@ -100,11 +100,11 @@ int bitmap_read(char **bitmap)
     return fread(*bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
 }
 
-int content_read(int block, char **buffer)
+int content_read(int block, char **buffer, int offset, int count)
 {
     block += util_disk->super_block->first_data_block;
 
-    fseek(util_fd, (block * BLOCK), SEEK_SET);
+    fseek(util_fd, (block * BLOCK) + offset, SEEK_SET);
 
-    return fread(*buffer, 1, BLOCK, util_fd);
+    return fread(buffer, 1, count, util_fd);
 }

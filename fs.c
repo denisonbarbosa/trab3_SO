@@ -32,7 +32,6 @@ void fs_init(void)
     init_disk_IO(disk);
 
     super_read(&disk->super_block);
-    printf("superblock read\n");
 
     if (disk->super_block->magic_number == 0)
     {
@@ -41,17 +40,14 @@ void fs_init(void)
     else
     {
         bitmap_read(&disk->bitmap);
-        printf("bitmap read\n");
 
         for (int i = 0; i < N_INODES; i++)
         {
             inode_read(i, &disk->inodes[i]);
         }
-        printf("inodes read\n");
     }
 
     entry_read(0, &current_dir);
-    printf("root_dir read\n");
 
     for (int i = 0; i < 20; i++)
         open_files[i].flag = -1;
@@ -211,57 +207,108 @@ int fs_close(int fd)
     return -1;
 }
 
-//TODO: fs_read: testing
 int fs_read(int fd, char *buf, int count)
 {
     int cursor = open_files[fd].cursor;
+    int bytes_read = 0;
 
-    if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY || open_files[fd].file->size < cursor)
+    if (fd > 20)
         return -1;
 
-    int i = 0;
+    if (open_files[fd].flag == FS_O_WRONLY)
+        return -1;
+
+    if (open_files[fd].file->size < cursor)
+        return -1;
 
     if (open_files[fd].file->size - cursor < count)
         count = open_files[fd].file->size - cursor;
 
-    if (count == 0)
-        return 0;
-    // printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file->size, cursor, count);
-
-    char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
-    buf = (char *)malloc(sizeof(char) * count);
-
-    // PEGA O INODE DO FD
     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
 
-    // ACHA QUAL BLOCO TÁ O CURSOR
-    int block_index = cursor / BLOCK_SIZE;
-    int offset = cursor % BLOCK_SIZE;
-    // LE
-    content_read(file_inode->hard_links[block_index], &block);
-    // printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
+    int cursor_block = cursor / BLOCK;
+    int cursor_offset = cursor % BLOCK;
+
+    int aux = 0;
+    char *init_buf = buf;
+    aux = content_read(file_inode->hard_links[cursor_block], buf, cursor_offset, count);
+    buf = buf + aux;
+    bytes_read += aux;
+    count -= aux;
+    cursor += aux;
+
+    if (count > 0)
     {
-        bcopy((block + offset), buf, BLOCK_SIZE - offset);
-        for (i = 1; (i + 1) * BLOCK_SIZE - offset < count; i++)
+        for (int i = cursor_block + 1; i < file_inode->n_links; i++)
         {
-            content_read(file_inode->hard_links[block_index + i], &block);
-            bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE);
+            if (count <= 0)
+                break;
+
+            aux = content_read(file_inode->hard_links[i], buf, 0, count);
+            buf = buf + aux;
+            count -= aux;
+            cursor += aux;
+            bytes_read += aux;
         }
     }
-    // printf("i: %d\n", i);
-    content_read(file_inode->hard_links[block_index + i], &block);
-    // printf("block: %s\n", block);
-
-    bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE - count % BLOCK_SIZE);
+    open_files[fd].cursor = cursor;
+    buf = init_buf;
+    return bytes_read;
 }
+
+// //TODO: fs_read: testing
+// int fs_read(int fd, char *buf, int count)
+// {
+//     int cursor = open_files[fd].cursor;
+
+//     if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY || open_files[fd].file->size < cursor)
+//         return -1;
+
+//     int i = 0;
+
+//     if (open_files[fd].file->size - cursor < count)
+//         count = open_files[fd].file->size - cursor;
+
+//     if (count == 0)
+//         return 0;
+//     // printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file->size, cursor, count);
+
+//     char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
+//     buf = (char *)malloc(sizeof(char) * count);
+
+//     // PEGA O INODE DO FD
+//     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
+
+//     // ACHA QUAL BLOCO TÁ O CURSOR
+//     int block_index = cursor / BLOCK_SIZE;
+//     int offset = cursor % BLOCK_SIZE;
+//     // LE
+//     content_read(file_inode->hard_links[block_index], &block);
+//     // printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
+//     {
+//         bcopy((block + offset), buf, BLOCK_SIZE - offset);
+//         for (i = 1; (i + 1) * BLOCK_SIZE - offset < count; i++)
+//         {
+//             content_read(file_inode->hard_links[block_index + i], &block);
+//             bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE);
+//         }
+//     }
+//     // printf("i: %d\n", i);
+//     content_read(file_inode->hard_links[block_index + i], &block);
+//     // printf("block: %s\n", block);
+
+//     bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE - count % BLOCK_SIZE);
+// }
 
 //TODO: fs_write: implementation
 int fs_write(int fd, char *buf, int count)
 {
-    if (fd > 20)
+    int cursor = open_files[fd].cursor;
+
+    if (fd > 20 || fd < 0)
         return -1;
 
-    inode_t file_inode = disk->inodes[open_files[fd].file->self_inode];
+    inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
 
     if (count > strlen(buf))
         count = strlen(buf);
@@ -269,37 +316,31 @@ int fs_write(int fd, char *buf, int count)
     int bytes_written = 0;
 
     // Remove after implementation of secundary and/or tertiary links on inode_t
-    if ((10 - file_inode.n_links) * BLOCK_SIZE < count)
+    if ((10 - file_inode->n_links) * BLOCK_SIZE < count)
         return -1;
 
     // VE SE TEM ESPAÇO NO ULTIMO ALOCADO
-    if (open_files[fd].file->size % BLOCK_SIZE > 0)
+    int cursor_block = cursor / BLOCK;
+    int cursor_block_offset = cursor % BLOCK;
+    int amount, aux;
+    int remaining_space = BLOCK_SIZE - cursor_block_offset;
+    int buf_size = strlen(buf);
+
+    // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
+    if (file_inode->n_links > 0)
     {
-        char *aux_string = (char *)malloc((open_files[fd].file->size % BLOCK_SIZE) * sizeof(char));
-        char *block = (char *)malloc(BLOCK * sizeof(char));
+        amount = buf_size;
+        if (amount < remaining_space)
+            amount = remaining_space;
 
-        int remaining_space = BLOCK_SIZE - (open_files[fd].file->size % BLOCK_SIZE);
-
-        // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
-        int buf_size = strlen(buf);
-        if (buf_size > remaining_space)
-        {
-            content_write(file_inode.hard_links[file_inode.n_links - 1], buf, remaining_space);
-            count -= remaining_space;
-            bytes_written += remaining_space;
-            buf = buf + remaining_space;
-            open_files[fd].file->size += remaining_space;
-        }
-        else
-        {
-            content_write(file_inode.hard_links[file_inode.n_links - 1], buf, buf_size);
-            count -= buf_size;
-            bytes_written += buf_size;
-            buf = buf + buf_size;
-            open_files[fd].file->size += buf_size;
-        }
-
-        printf("count: %d\nbytes_written: %d\nremaining space: %d\n", count, bytes_written, remaining_space);
+        aux = content_write(file_inode->hard_links[cursor_block], buf, cursor_block_offset, amount);
+        count -= aux;
+        bytes_written += aux;
+        buf = buf + aux;
+        open_files[fd].file->size += aux;
+        cursor += aux;
+        cursor_block = cursor / BLOCK;
+        buf_size -= aux;
     }
 
     while (count > 0)
@@ -309,31 +350,29 @@ int fs_write(int fd, char *buf, int count)
         while (i < N_DATA_BLOCKS && disk->bitmap[i] != '1')
             i++;
 
-        file_inode.hard_links[file_inode.n_links++] = i;
+        file_inode->hard_links[file_inode->n_links++] = i;
         disk->bitmap[i] = '0';
 
         // ESCREVE NO BLOCO ALOCADO
+        amount = buf_size;
+        if (amount > count)
+            amount = count;
 
-        if (count > BLOCK_SIZE)
-        {
-            content_write(i, buf, BLOCK_SIZE);
-            count -= BLOCK_SIZE;
-            bytes_written += BLOCK_SIZE;
-            buf = buf + BLOCK_SIZE;
-            open_files[fd].file->size += BLOCK_SIZE;
-        }
-        else
-        {
-            content_write(i, buf, count);
-            bytes_written += count;
-            open_files[fd].file->size += count;
-            count = 0;
-        }
+        aux = content_write(i, buf, 0, amount);
+        count -= aux;
+        bytes_written += aux;
+        buf = buf + aux;
+        open_files[fd].file->size += aux;
+        cursor += aux;
+        buf_size -= aux;
     }
-    disk->inodes[open_files[fd].file->self_inode] = file_inode;
 
+    open_files[fd].cursor = cursor;
+    disk->inodes[open_files[fd].file->self_inode] = *file_inode;
+    inode_write(open_files[fd].file->self_inode, file_inode);
+    bitmap_write(disk->bitmap);
     entry_write(open_files[fd].file->self_block, open_files[fd].file);
-    fs_flush();
+
     return bytes_written;
 }
 

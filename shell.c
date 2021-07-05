@@ -326,6 +326,7 @@ static void shell_cat( void) {
 		printf("n: %d\n", n);
 		for ( i = 0; i < n; i++) 
 			writeChar( buf[i]);
+		writeChar( RETURN);
 	} while ( n > 0);
 	fs_close( fd);
 	writeChar( RETURN);

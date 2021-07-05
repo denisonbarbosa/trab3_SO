@@ -12,7 +12,7 @@ int entry_write(int n, block_entry_t *entry);
 
 int bitmap_write(char *bitmap);
 
-int content_write(int block, char* buffer, int count);
+int content_write(int block, char* buffer, int offset, int count);
 
 int inode_read(int n, inode_t *inode);
 
@@ -20,6 +20,6 @@ int entry_read(int n, block_entry_t **entry);
 
 int bitmap_read(char **bitmap);
 
-int content_read(int block, char **buffer);
+int content_read(int block, char **buffer, int offset, int count);
 
 #endif
