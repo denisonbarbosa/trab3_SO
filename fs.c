@@ -573,6 +573,7 @@ int fs_unlink(char *fileName)
     if (found && disk->inodes[aux->self_inode].link_count == 0)
         return 0;
     
+    printf("0 links and file not open\n");
     if (disk->inodes[aux->self_inode].link_count == 0)
     {
 
@@ -582,12 +583,12 @@ int fs_unlink(char *fileName)
             disk->bitmap[file_inode->hard_links[j]] = '1';
         }
         file_inode->type = TYPE_EMPTY;
-        return 0;
     }
 
     inode_write(current_dir->self_inode, current_dir_inode);
     inode_write(aux->self_inode, &disk->inodes[aux->self_inode]);
     bitmap_write(disk->bitmap);
+    return 0;
 }
 
 //DONE: fs_stat
