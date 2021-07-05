@@ -248,7 +248,6 @@ static void shell_cd( void) {
 		writeStr("OK\n");
 }
 
-//TODO: shell_ls: implementation
 static void shell_ls( void) {
 	//should a system call print to the screen?
 	// writeStr("Problem with ls\n");

@@ -16,7 +16,6 @@ static disk_t *disk;
 static block_entry_t *current_dir;
 static opened_file_t *open_files;
 static int n_open_files;
-// static block_entry_t *aux;
 static block_entry_t *new_file;
 
 //TODO: fs_init: testing
@@ -39,7 +38,7 @@ void fs_init(void)
     }
     else
     {
-        bitmap_read(&disk->bitmap);
+        bitmap_read(disk->bitmap);
 
         for (int i = 0; i < N_INODES; i++)
         {
@@ -53,7 +52,7 @@ void fs_init(void)
         open_files[i].flag = -1;
 }
 
-//TODO: fs_mkfs: testing
+//DONE: fs_mkfs
 int fs_mkfs(void)
 {
     disk->super_block->blocks_size = BLOCK_SIZE;
@@ -92,17 +91,15 @@ int fs_mkfs(void)
     root->parent_inode = 0;
     root->self_block = 0;
     root->parent_block = 0;
-    root->size = 0;
-    root->type = TYPE_DIR;
 
     entry_write(root->self_block, root);
 
     return 0;
 }
 
+//DONE: fs_open
 int fs_open(char *fileName, int flags)
 {
-    // VER SE O ARQUIVO JA EXISTE
     inode_t *current_inode = &disk->inodes[current_dir->self_inode];
 
     block_entry_t *aux = (block_entry_t *)malloc(sizeof(block_entry_t));
@@ -117,10 +114,9 @@ int fs_open(char *fileName, int flags)
         }
     }
 
-    // SE SIM, RETORNA DESCRITOR PRA ELE
     if (i < current_inode->n_links)
     {
-        if (aux->type == TYPE_DIR && flags > 1)
+        if (disk->inodes[aux->self_inode].type == TYPE_DIR && flags > 1)
             return -1;
         for (int j = 0; j < 20; j++)
         {
@@ -134,7 +130,6 @@ int fs_open(char *fileName, int flags)
         }
         return -1;
     }
-    // SE NAO, CRIA OUTRO ARQUIVO
     if (flags < 2)
         return -1;
 
@@ -162,8 +157,6 @@ int fs_open(char *fileName, int flags)
     (new_file)->parent_inode = current_dir->self_inode;
     (new_file)->self_inode = j;
     (new_file)->self_block = i;
-    (new_file)->size = 0;
-    (new_file)->type = TYPE_FILE;
 
     disk->inodes[j].link_count = 1;
     disk->inodes[j].n_links = 0;
@@ -171,7 +164,6 @@ int fs_open(char *fileName, int flags)
     disk->inodes[j].type = TYPE_FILE;
     inode_write(j, &disk->inodes[j]);
 
-    current_dir->size++;
     current_inode->size++;
 
     current_inode->hard_links[current_inode->n_links++] = i;
@@ -181,7 +173,6 @@ int fs_open(char *fileName, int flags)
 
     entry_write(current_dir->self_block, current_dir);
 
-    // RETORNA DESCRITOR DO NOVO ARQUIVO
     for (int c = 0; c < 20; c++)
     {
         if (open_files[c].flag == -1)
@@ -196,47 +187,58 @@ int fs_open(char *fileName, int flags)
     return -1;
 }
 
-//TODO: fs_close: testing
+//DONE: fs_close
 int fs_close(int fd)
 {
-    if (fd < 20)
-    {
-        open_files[fd].flag = -1;
-        return 0;
-    }
-    return -1;
+    if (fd > 20 || fd < 0)
+        return -1;
+
+    if (open_files[fd].flag == -1)
+        return -1;
+
+    inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
+
+    open_files[fd].flag = -1;
+
+    if (file_inode->link_count == 0)
+        fs_unlink(open_files[fd].file->name);
+
+    return 0;
 }
 
+//DONE: fs_read
 int fs_read(int fd, char *buf, int count)
 {
     int cursor = open_files[fd].cursor;
     int bytes_read = 0;
 
-    if (fd > 20)
+    inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
+
+    if (fd >= 20 || fd < 0)
         return -1;
 
     if (open_files[fd].flag == FS_O_WRONLY)
         return -1;
 
-    if (open_files[fd].file->size < cursor)
+    if (file_inode->size < cursor)
         return -1;
 
-    if (open_files[fd].file->size - cursor < count)
-        count = open_files[fd].file->size - cursor;
-
-    inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
+    if (file_inode->size - cursor < count)
+        count = file_inode->size - cursor;
 
     int cursor_block = cursor / BLOCK;
     int cursor_offset = cursor % BLOCK;
 
     int aux = 0;
     char *init_buf = buf;
-    aux = content_read(file_inode->hard_links[cursor_block], buf, cursor_offset, count);
-    buf = buf + aux;
-    bytes_read += aux;
-    count -= aux;
-    cursor += aux;
-
+    if (file_inode->n_links > 0)
+    {
+        aux = content_read(file_inode->hard_links[cursor_block], buf, cursor_offset, count);
+        buf = buf + aux;
+        bytes_read += aux;
+        count -= aux;
+        cursor += aux;
+    }
     if (count > 0)
     {
         for (int i = cursor_block + 1; i < file_inode->n_links; i++)
@@ -256,56 +258,12 @@ int fs_read(int fd, char *buf, int count)
     return bytes_read;
 }
 
-// //TODO: fs_read: testing
-// int fs_read(int fd, char *buf, int count)
-// {
-//     int cursor = open_files[fd].cursor;
-
-//     if (fd > 20 || open_files[fd].flag < 0 || open_files[fd].flag == FS_O_WRONLY || open_files[fd].file->size < cursor)
-//         return -1;
-
-//     int i = 0;
-
-//     if (open_files[fd].file->size - cursor < count)
-//         count = open_files[fd].file->size - cursor;
-
-//     if (count == 0)
-//         return 0;
-//     // printf("file size: %d && cursor: %d && count: %d\n", open_files[fd].file->size, cursor, count);
-
-//     char *block = (char *)malloc(sizeof(char) * BLOCK_SIZE);
-//     buf = (char *)malloc(sizeof(char) * count);
-
-//     // PEGA O INODE DO FD
-//     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
-
-//     // ACHA QUAL BLOCO TÁ O CURSOR
-//     int block_index = cursor / BLOCK_SIZE;
-//     int offset = cursor % BLOCK_SIZE;
-//     // LE
-//     content_read(file_inode->hard_links[block_index], &block);
-//     // printf("bloco: %d | offset: %d | count: %d \n", block_index, offset, count);
-//     {
-//         bcopy((block + offset), buf, BLOCK_SIZE - offset);
-//         for (i = 1; (i + 1) * BLOCK_SIZE - offset < count; i++)
-//         {
-//             content_read(file_inode->hard_links[block_index + i], &block);
-//             bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE);
-//         }
-//     }
-//     // printf("i: %d\n", i);
-//     content_read(file_inode->hard_links[block_index + i], &block);
-//     // printf("block: %s\n", block);
-
-//     bcopy(block, buf + i * BLOCK_SIZE, BLOCK_SIZE - count % BLOCK_SIZE);
-// }
-
-//TODO: fs_write: implementation
+//DONE: fs_write
 int fs_write(int fd, char *buf, int count)
 {
     int cursor = open_files[fd].cursor;
 
-    if (fd > 20 || fd < 0)
+    if (fd >= 20 || fd < 0)
         return -1;
 
     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
@@ -319,25 +277,23 @@ int fs_write(int fd, char *buf, int count)
     if ((10 - file_inode->n_links) * BLOCK_SIZE < count)
         return -1;
 
-    // VE SE TEM ESPAÇO NO ULTIMO ALOCADO
     int cursor_block = cursor / BLOCK;
     int cursor_block_offset = cursor % BLOCK;
     int amount, aux;
     int remaining_space = BLOCK_SIZE - cursor_block_offset;
     int buf_size = strlen(buf);
 
-    // ESCREVE NO ULTIMO BLOCO ALOCADO SE TIVER ESPAÇO
     if (file_inode->n_links > 0)
     {
         amount = buf_size;
-        if (amount < remaining_space)
+        if (amount > remaining_space)
             amount = remaining_space;
 
         aux = content_write(file_inode->hard_links[cursor_block], buf, cursor_block_offset, amount);
         count -= aux;
         bytes_written += aux;
         buf = buf + aux;
-        open_files[fd].file->size += aux;
+        file_inode->size += aux;
         cursor += aux;
         cursor_block = cursor / BLOCK;
         buf_size -= aux;
@@ -345,7 +301,6 @@ int fs_write(int fd, char *buf, int count)
 
     while (count > 0)
     {
-        // ALOCA BLOCO
         int i = 0;
         while (i < N_DATA_BLOCKS && disk->bitmap[i] != '1')
             i++;
@@ -353,7 +308,6 @@ int fs_write(int fd, char *buf, int count)
         file_inode->hard_links[file_inode->n_links++] = i;
         disk->bitmap[i] = '0';
 
-        // ESCREVE NO BLOCO ALOCADO
         amount = buf_size;
         if (amount > count)
             amount = count;
@@ -362,13 +316,12 @@ int fs_write(int fd, char *buf, int count)
         count -= aux;
         bytes_written += aux;
         buf = buf + aux;
-        open_files[fd].file->size += aux;
+        file_inode->size += aux;
         cursor += aux;
         buf_size -= aux;
     }
 
     open_files[fd].cursor = cursor;
-    disk->inodes[open_files[fd].file->self_inode] = *file_inode;
     inode_write(open_files[fd].file->self_inode, file_inode);
     bitmap_write(disk->bitmap);
     entry_write(open_files[fd].file->self_block, open_files[fd].file);
@@ -376,17 +329,17 @@ int fs_write(int fd, char *buf, int count)
     return bytes_written;
 }
 
-//TODO: fs_lseek: testing
+//DONE: fs_lseek
 int fs_lseek(int fd, int offset)
 {
-    if (fd > 20 || fd < 0 || open_files[fd].flag < 0)
+    if (fd >= 20 || fd < 0 || open_files[fd].flag < 0)
         return -1;
 
     open_files[fd].cursor = offset;
     return open_files[fd].cursor;
 }
 
-//TODO: fs_mkdir: testing
+//DONE: fs_mkdir
 int fs_mkdir(char *fileName)
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
@@ -423,13 +376,10 @@ int fs_mkdir(char *fileName)
     bcopy(fileName, new_dir->name, strlen(fileName));
     new_dir->parent_inode = current_dir->self_inode;
     new_dir->parent_block = current_dir->self_block;
-    new_dir->size = 0;
-    new_dir->type = TYPE_DIR;
     new_dir->self_block = i;
     new_dir->self_inode = j;
 
     current_dir_inode->size++;
-    current_dir->size++;
 
     disk->inodes[j].type = TYPE_DIR;
     disk->inodes[j].link_count = 1;
@@ -446,7 +396,7 @@ int fs_mkdir(char *fileName)
     return 0;
 }
 
-//TODO: fs_rmdir: testing
+//DONE: fs_rmdir
 int fs_rmdir(char *fileName)
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
@@ -462,7 +412,7 @@ int fs_rmdir(char *fileName)
 
         if (same_string(aux->name, fileName))
         {
-            if (aux->type != TYPE_DIR)
+            if (disk->inodes[aux->self_inode].type != TYPE_DIR)
                 return -1;
             break;
         }
@@ -490,7 +440,7 @@ int fs_rmdir(char *fileName)
     return 0;
 }
 
-//TODO: fs_cd: testing
+//DONE: fs_cd
 int fs_cd(char *dirName)
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
@@ -514,6 +464,8 @@ int fs_cd(char *dirName)
         entry_read(current_dir_inode->hard_links[i], &aux);
         if (same_string(aux->name, dirName))
         {
+            if (disk->inodes[aux->self_inode].type == TYPE_FILE)
+                return -1;
             break;
         }
     }
@@ -527,19 +479,18 @@ int fs_cd(char *dirName)
     return 0;
 }
 
-//TODO: fs_link: testing
+//DONE: fs_link
 int fs_link(char *old_fileName, char *new_fileName)
 {
-    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
-    block_entry_t *aux;
-    aux = (block_entry_t *)malloc(sizeof(block_entry_t));
+    inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
+    block_entry_t *aux = (block_entry_t *)malloc(sizeof(block_entry_t));
 
     int found = FALSE;
     int i;
 
-    for (i = 0; i < current_dir_inode.n_links; i++)
+    for (i = 0; i < current_dir_inode->n_links; i++)
     {
-        entry_read(current_dir_inode.hard_links[i], &aux);
+        entry_read(current_dir_inode->hard_links[i], &aux);
 
         if (same_string(aux->name, old_fileName))
         {
@@ -549,66 +500,93 @@ int fs_link(char *old_fileName, char *new_fileName)
     }
 
     // Remove last condition after implementation of secundary and/or tertiary links on inode_t
-    if (found && aux->type == TYPE_FILE && current_dir_inode.n_links < 10)
+    if (found && disk->inodes[aux->self_inode].type == TYPE_FILE && current_dir_inode->n_links < 10)
     {
+
         block_entry_t *new_file = (block_entry_t *)malloc(sizeof(block_entry_t));
-        new_file->name = new_fileName;
+        new_file->name = (char *)malloc(MAX_FILE_NAME * sizeof(char));
+        bcopy(new_fileName, new_file->name, strlen(new_fileName));
         new_file->parent_block = aux->parent_block;
         new_file->parent_inode = aux->parent_inode;
-        new_file->self_block = aux->self_block;
         new_file->self_inode = aux->self_inode;
-        new_file->size = aux->size;
-        new_file->type = aux->type;
+        disk->inodes[new_file->self_inode].link_count++;
 
-        for (i = disk->super_block->first_data_block, found = FALSE; i < N_DATA_BLOCKS; i++)
-        {
-            if (disk->bitmap[i] == '1')
-            {
-                found = TRUE;
-                break;
-            }
-        }
+        i = 0;
+        while (i < N_DATA_BLOCKS && disk->bitmap[i] != '1')
+            i++;
 
-        if (found)
-        {
-            entry_write(i, new_file);
-            current_dir_inode.hard_links[current_dir_inode.n_links++] = i;
-            fs_flush();
-            return 0;
-        }
+        if (i == N_DATA_BLOCKS)
+            return -1;
+
+        disk->bitmap[i] = '0';
+        bitmap_write(disk->bitmap);
+        new_file->self_block = i;
+        entry_write(i, new_file);
+        current_dir_inode->hard_links[current_dir_inode->n_links++] = i;
+        inode_write(current_dir->self_inode, current_dir_inode);
+        inode_write(new_file->self_inode, &disk->inodes[new_file->self_inode]);
+        return 0;
     }
 
     return -1;
 }
 
-//TODO: fs_unlink: implementation
+//DONE: fs_unlink
 int fs_unlink(char *fileName)
 {
-    inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
+    inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
     block_entry_t *aux;
     aux = (block_entry_t *)malloc(sizeof(block_entry_t));
 
-    int found = FALSE;
     int i;
-
-    for (i = 0; i < current_dir_inode.n_links; i++)
+    for (i = 0; i < current_dir_inode->n_links; i++)
     {
-        entry_read(current_dir_inode.hard_links[i], &aux);
+        entry_read(current_dir_inode->hard_links[i], &aux);
 
         if (same_string(aux->name, fileName))
         {
-            found = TRUE;
             break;
         }
     }
-
-    if (found == FALSE || aux->type == TYPE_DIR)
+    if (i == current_dir_inode->n_links)
         return -1;
 
-    // TODO
+    if (disk->inodes[aux->self_inode].type == TYPE_DIR)
+        return -1;
+
+    if (disk->inodes[aux->self_inode].link_count == 0)
+    {
+        for (int j = 0; j < 20; j++)
+        {
+            if (same_string(open_files[j].file->name, aux->name) && open_files[j].flag > -1)
+            {
+                return 0;
+            }
+        }
+
+        inode_t *file_inode = &disk->inodes[aux->self_inode];
+        for (int j = 0; j < file_inode->n_links; j++)
+        {
+            disk->bitmap[file_inode->hard_links[j]] = '1';
+        }
+        file_inode->type = TYPE_EMPTY;
+        return 0;
+    }
+
+    disk->bitmap[aux->self_block] = '1';
+    disk->inodes[aux->self_inode].link_count--;
+
+    for (; i < current_dir_inode->n_links - 1; i++)
+        current_dir_inode->hard_links[i] = current_dir_inode->hard_links[i + 1];
+
+    current_dir_inode->n_links--;
+
+    inode_write(current_dir->self_inode, current_dir_inode);
+    inode_write(aux->self_inode, &disk->inodes[aux->self_inode]);
+    bitmap_write(disk->bitmap);
 }
 
-//TODO: fs_stat: testing
+//DONE: fs_stat
 int fs_stat(char *fileName, fileStat *buf)
 {
     inode_t current_dir_inode = disk->inodes[current_dir->self_inode];
@@ -629,19 +607,20 @@ int fs_stat(char *fileName, fileStat *buf)
         }
     }
 
-    if (found == FALSE || aux->type == TYPE_DIR)
+    if (found == FALSE || disk->inodes[aux->self_inode].type == TYPE_DIR)
         return -1;
 
     buf->inodeNo = aux->self_inode;
     buf->links = disk->inodes[aux->self_inode].link_count;
     buf->numBlocks = disk->inodes[aux->self_inode].n_links;
-    buf->size = aux->size;
+    buf->size = disk->inodes[aux->self_inode].size;
 
-    buf->type = atoi(&aux->type);
+    buf->type = atoi(&disk->inodes[aux->self_inode].type);
 
     return 0;
 }
 
+//DONE: fs_ls
 int fs_ls()
 {
     inode_t *current_dir_inode = &disk->inodes[current_dir->self_inode];
@@ -652,7 +631,7 @@ int fs_ls()
         aux = (block_entry_t *)malloc(sizeof(block_entry_t));
         entry_read(current_dir_inode->hard_links[i], &aux);
 
-        printf("%s %c %d %d\n", aux->name, aux->type, aux->self_inode, aux->size);
+        printf("%s %c %d %d\n", aux->name, disk->inodes[aux->self_inode].type, aux->self_inode, disk->inodes[aux->self_inode].size);
     }
     return 0;
 }

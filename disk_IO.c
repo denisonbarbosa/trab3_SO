@@ -38,7 +38,7 @@ int inode_write(int n, inode_t *inode)
 
 int entry_write(int n, block_entry_t *entry)
 {
-    int block = entry->self_block;
+    int block = n;
     block += util_disk->super_block->first_data_block;
 
     fseek(util_fd, (block * BLOCK), SEEK_SET);
@@ -57,7 +57,7 @@ int content_write(int block, char *buffer, int offset, int count)
 {
     block += util_disk->super_block->first_data_block;
 
-    fseek(util_fd, (block * BLOCK) + offset , SEEK_SET);
+    fseek(util_fd, (block * BLOCK) + offset, SEEK_SET);
 
     return fwrite(buffer, 1, count, util_fd);
 }
@@ -97,7 +97,7 @@ int bitmap_read(char **bitmap)
 {
     fseek(util_fd, BLOCK, SEEK_SET);
 
-    return fread(*bitmap, N_DATA_BLOCKS * sizeof(char), 1, util_fd);
+    return fread(bitmap, 1, N_DATA_BLOCKS, util_fd);
 }
 
 int content_read(int block, char **buffer, int offset, int count)

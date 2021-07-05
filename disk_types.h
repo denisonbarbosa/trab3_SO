@@ -46,11 +46,9 @@ typedef struct block_entry_s
 {
     int self_inode;
     int parent_inode;
-    int size;
     int self_block;
     int parent_block;
     char *name;
-    char type;
 } block_entry_t;
 
 typedef struct opened_file_s
