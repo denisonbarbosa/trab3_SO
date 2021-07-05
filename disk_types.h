@@ -1,7 +1,8 @@
 #define FORMATTED_DISK 1
 #define BLOCK 512
-#define N_INODES 1032
-#define N_DATA_BLOCKS 1914
+#define N_INODES 2048
+#define N_DATA_BLOCKS 1787
+#define MAX_FILE_HANDLERS 255
 
 #define TYPE_EMPTY '0'
 #define TYPE_DIR '1'

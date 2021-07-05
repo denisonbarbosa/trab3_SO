@@ -25,7 +25,7 @@ void fs_init(void)
     disk->super_block = (super_block_t *)malloc(sizeof(super_block_t));
     disk->inodes = (inode_t *)malloc(N_INODES * sizeof(inode_t));
     disk->bitmap = (char *)malloc(N_DATA_BLOCKS * sizeof(char));
-    open_files = (opened_file_t *)malloc(20 * sizeof(opened_file_t));
+    open_files = (opened_file_t *)malloc(MAX_FILE_HANDLERS * sizeof(opened_file_t));
     current_dir = (block_entry_t *)malloc(sizeof(block_entry_t));
 
     init_disk_IO(disk);
@@ -43,7 +43,7 @@ void fs_init(void)
         entry_read(0, &current_dir);
     }
 
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < MAX_FILE_HANDLERS; i++)
         open_files[i].flag = -1;
 }
 
@@ -65,16 +65,15 @@ int fs_mkfs(void)
     disk->inodes[0].n_links = 0;
     disk->bitmap[0] = '0';
 
-    for (int i = 1; i < N_DATA_BLOCKS; i++)
+    for (int i = 1; i < N_INODES; i++)
     {
-        if (i < N_INODES)
-        {
-            disk->inodes[i].type = TYPE_EMPTY;
-            disk->inodes[i].size = 0;
-            disk->inodes[i].link_count = 0;
-            disk->inodes[i].n_links = 0;
-        }
-        disk->bitmap[i] = '1';
+        if (i < N_DATA_BLOCKS)
+            disk->bitmap[i] = '1';
+
+        disk->inodes[i].type = TYPE_EMPTY;
+        disk->inodes[i].size = 0;
+        disk->inodes[i].link_count = 0;
+        disk->inodes[i].n_links = 0;
     }
 
     fs_flush();
@@ -113,7 +112,7 @@ int fs_open(char *fileName, int flags)
     {
         if (disk->inodes[aux->self_inode].type == TYPE_DIR && flags > 1)
             return -1;
-        for (int j = 0; j < 20; j++)
+        for (int j = 0; j < MAX_FILE_HANDLERS; j++)
         {
             if (open_files[j].flag == -1)
             {
@@ -168,7 +167,7 @@ int fs_open(char *fileName, int flags)
 
     entry_write(current_dir->self_block, current_dir);
 
-    for (int c = 0; c < 20; c++)
+    for (int c = 0; c < MAX_FILE_HANDLERS; c++)
     {
         if (open_files[c].flag == -1)
         {
@@ -185,7 +184,7 @@ int fs_open(char *fileName, int flags)
 //DONE: fs_close
 int fs_close(int fd)
 {
-    if (fd > 20 || fd < 0)
+    if (fd > MAX_FILE_HANDLERS || fd < 0)
         return -1;
 
     if (open_files[fd].flag == -1)
@@ -209,7 +208,7 @@ int fs_read(int fd, char *buf, int count)
 
     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
 
-    if (fd >= 20 || fd < 0)
+    if (fd >= MAX_FILE_HANDLERS || fd < 0)
         return -1;
 
     if (open_files[fd].flag == FS_O_WRONLY)
@@ -258,7 +257,7 @@ int fs_write(int fd, char *buf, int count)
 {
     int cursor = open_files[fd].cursor;
 
-    if (fd >= 20 || fd < 0)
+    if (fd >= MAX_FILE_HANDLERS || fd < 0)
         return -1;
 
     inode_t *file_inode = &disk->inodes[open_files[fd].file->self_inode];
@@ -327,7 +326,7 @@ int fs_write(int fd, char *buf, int count)
 //DONE: fs_lseek
 int fs_lseek(int fd, int offset)
 {
-    if (fd >= 20 || fd < 0 || open_files[fd].flag < 0)
+    if (fd >= MAX_FILE_HANDLERS || fd < 0 || open_files[fd].flag < 0)
         return -1;
 
     open_files[fd].cursor = offset;
@@ -550,7 +549,7 @@ int fs_unlink(char *fileName)
         return -1;
 
     int found = FALSE;
-    for (int j = 0; j < 20; j++)
+    for (int j = 0; j < MAX_FILE_HANDLERS; j++)
     {
         if (same_string(open_files[j].file->name, aux->name) && open_files[j].flag > -1)
         {
@@ -572,8 +571,7 @@ int fs_unlink(char *fileName)
 
     if (found && disk->inodes[aux->self_inode].link_count == 0)
         return 0;
-    
-    printf("0 links and file not open\n");
+
     if (disk->inodes[aux->self_inode].link_count == 0)
     {
 

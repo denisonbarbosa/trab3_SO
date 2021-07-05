@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# coding: utf-8
 
 import os
 import sys
@@ -12,7 +13,7 @@ def spawn_lnxsh():
 
 
 def issue(command):
-    p.stdin.write(command + '\n')
+    p.stdin.write(bytes(command + '\n', 'utf-8'))
 
 
 def check_fs_size():
