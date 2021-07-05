@@ -32,11 +32,7 @@ void fs_init(void)
 
     super_read(&disk->super_block);
 
-    if (disk->super_block->magic_number == 0)
-    {
-        fs_mkfs();
-    }
-    else
+    if (disk->super_block->magic_number == FORMATTED_DISK)
     {
         bitmap_read(disk->bitmap);
 
@@ -44,9 +40,8 @@ void fs_init(void)
         {
             inode_read(i, &disk->inodes[i]);
         }
+        entry_read(0, &current_dir);
     }
-
-    entry_read(0, &current_dir);
 
     for (int i = 0; i < 20; i++)
         open_files[i].flag = -1;
@@ -554,15 +549,32 @@ int fs_unlink(char *fileName)
     if (disk->inodes[aux->self_inode].type == TYPE_DIR)
         return -1;
 
+    int found = FALSE;
+    for (int j = 0; j < 20; j++)
+    {
+        if (same_string(open_files[j].file->name, aux->name) && open_files[j].flag > -1)
+        {
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (disk->inodes[aux->self_inode].link_count > 0)
+    {
+        disk->bitmap[aux->self_block] = '1';
+        disk->inodes[aux->self_inode].link_count--;
+
+        for (; i < current_dir_inode->n_links - 1; i++)
+            current_dir_inode->hard_links[i] = current_dir_inode->hard_links[i + 1];
+
+        current_dir_inode->n_links--;
+    }
+
+    if (found && disk->inodes[aux->self_inode].link_count == 0)
+        return 0;
+    
     if (disk->inodes[aux->self_inode].link_count == 0)
     {
-        for (int j = 0; j < 20; j++)
-        {
-            if (same_string(open_files[j].file->name, aux->name) && open_files[j].flag > -1)
-            {
-                return 0;
-            }
-        }
 
         inode_t *file_inode = &disk->inodes[aux->self_inode];
         for (int j = 0; j < file_inode->n_links; j++)
@@ -572,14 +584,6 @@ int fs_unlink(char *fileName)
         file_inode->type = TYPE_EMPTY;
         return 0;
     }
-
-    disk->bitmap[aux->self_block] = '1';
-    disk->inodes[aux->self_inode].link_count--;
-
-    for (; i < current_dir_inode->n_links - 1; i++)
-        current_dir_inode->hard_links[i] = current_dir_inode->hard_links[i + 1];
-
-    current_dir_inode->n_links--;
 
     inode_write(current_dir->self_inode, current_dir_inode);
     inode_write(aux->self_inode, &disk->inodes[aux->self_inode]);

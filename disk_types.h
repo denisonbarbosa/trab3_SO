@@ -42,6 +42,11 @@ typedef struct data_block_s
     char *content;
 } data_block_t;
 
+typedef struct links_block_s
+{
+    int links[128];
+} links_block_t;
+
 typedef struct block_entry_s
 {
     int self_inode;
